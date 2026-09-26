@@ -41,7 +41,7 @@
       <p>单目 + IMU 的典型输入不是“同步对齐的一张图 + 一条 IMU”，而是：</p>
       <pre id="entryInput">图像帧 k      : I_k, timestamp t_k
 图像帧 k+1    : I_{k+1}, timestamp t_{k+1}
-IMU 序列      : {u_i | t_k &lt;= t_i &lt;= t_{k+1}}
+IMU 序列      : 从 first_imu 游标起，取所有尚未消费且 t_i &lt;= t_{k+1} 的样本
 系统调用      : TrackMonocular(I_{k+1}, t_{k+1}, vImuMeas)</pre>
       <div class="button-row"><button class="btn" data-copy="#entryInput">复制</button></div>
     </div>
@@ -84,7 +84,7 @@ IMU 序列      : {u_i | t_k &lt;= t_i &lt;= t_{k+1}}
   <div class="grid two">
     <div class="card">
       <h3>为什么要按图像帧切片收集 IMU？</h3>
-      <p>ORB-SLAM3 的前端仍以图像帧为“主事件”。每来一张图，系统都会建立一个 <code>Frame</code> 并更新当前位姿。IMU 的角色是帮助系统在相邻图像之间做更合理的运动预测与后端约束。所以例子程序的自然工作方式是：<strong>每处理一张图，就把上次图像时刻到本次图像时刻之间的 IMU 片段一并提交</strong>。</p>
+      <p>ORB-SLAM3 的前端仍以图像帧为“主事件”。每来一张图，系统都会建立一个 <code>Frame</code> 并更新当前位姿。IMU 的角色是帮助系统在相邻图像之间做更合理的运动预测与后端约束。所以例子程序的自然工作方式是：<strong>每处理一张图，就从持续前进的 IMU 游标中收集“尚未消费且时间戳不晚于当前图像”的样本；EuRoC 示例在开始时还特意保留一个不晚于首帧的边界样本，供后续预积分处理时间边界</strong>。</p>
       <div class="note">这也是你以后接实时传感器时最该模仿的接口行为：图像是主时钟，IMU 是帧间补偿与优化约束。</div>
     </div>
     <div class="card">

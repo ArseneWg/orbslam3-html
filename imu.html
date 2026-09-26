@@ -39,7 +39,7 @@
       <ul class="simple-list">
         <li><code>Tracking::GrabImuData()</code>：缓存新到达的 IMU 样本。</li>
         <li><code>Tracking::PreintegrateIMU()</code>：在上一帧与当前帧之间对 IMU 做预积分。</li>
-        <li><code>LocalMapping::InitializeIMU()</code>：在有足够关键帧与运动激励时执行惯性初始化。</li>
+        <li><code>LocalMapping::InitializeIMU()</code>：LocalMapping 在地图尚未完成 IMU 初始化时尝试调用；对 Mono，函数内部硬门槛是至少 10 个 KeyFrame、首尾时间跨度至少 2.0 s。</li>
       </ul>
     </div>
   </div>
@@ -64,7 +64,7 @@
   <div class="grid two">
     <div class="card">
       <h3>为什么单目系统还需要 IMU 初始化？</h3>
-      <p>因为单目视觉即使初始化成功，本质上仍可能处在“相似变换”尺度空间里：地图可以整体放大/缩小而不改变重投影误差。IMU 带来了与真实物理量相关的加速度和角速度信息，因此只要运动激励足够，就能帮助估计：</p>
+      <p>因为单目视觉即使初始化成功，本质上仍可能处在“相似变换”尺度空间里：地图可以整体放大/缩小而不改变重投影误差。IMU 带来了与真实物理量相关的加速度和角速度信息，这些惯性观测使系统能够联合估计下列状态。需要注意：<code>InitializeIMU()</code> 的入口没有一个单独名为“运动激励”的硬阈值；可观测性会通过惯性优化结果以及 LocalMapping 后续的运动距离检查体现：</p>
       <ul class="simple-list">
         <li>重力方向</li>
         <li>全局尺度</li>

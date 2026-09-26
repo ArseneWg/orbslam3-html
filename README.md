@@ -29,3 +29,8 @@
 ## 提交规则
 
 每完成一个 Stage，就直接推送到 `main`，形成可独立回退的 checkpoint。所有源码结论继续固定到上面的官方 baseline，除非明确升级 baseline。
+
+
+## Source review
+
+逐页源码复核记录见 [`SOURCE_REVIEW.md`](SOURCE_REVIEW.md)。该审计固定对照同一 upstream baseline，并记录已修正的边界条件、阈值顺序和交互模拟差异。

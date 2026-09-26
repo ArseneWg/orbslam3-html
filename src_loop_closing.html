@@ -3,7 +3,7 @@
 <section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>LoopClosing 精读：BoW、Sim3、连续确认与惯性约束</h1><p>把“回环检测”拆成候选检索、几何验证、时间一致性、惯性检查和地图冻结后的真正校正。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="loop"></div></div></section>
 <main class="container">
 <section class="section"><div class="card"><h2>Run() 不是“发现相似就闭环”</h2><div class="source-chain"><span class="box">CheckNewKeyFrames</span><span class="call-arrow">→</span><span class="box">NewDetectCommonRegions</span><span class="call-arrow">→</span><span class="box">Merge?</span><span class="call-arrow">/</span><span class="box">Loop?</span><span class="call-arrow">→</span><span class="box">CorrectLoop / MergeLocal2</span></div><p>Place Recognition 只是在找候选区域；后面还有连续一致性、Sim3、投影匹配和惯性约束检查。</p></div></section>
-<section class="section"><h2>候选检测的硬阈值</h2><table class="table threshold-table"><tr><th>变量</th><th>值</th><th>位置</th></tr><tr><td>nBoWMatches</td><td>20</td><td>候选必须有足够 BoW 匹配</td></tr><tr><td>nBoWInliers</td><td>15</td><td>Sim3 RANSAC 最低内点</td></tr><tr><td>nSim3Inliers</td><td>20</td><td>Sim3 阶段内点门槛</td></tr><tr><td>nProjMatches</td><td>50</td><td>投影匹配门槛</td></tr><tr><td>nProjOptMatches</td><td>80</td><td>进一步优化门槛</td></tr></table><p><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LoopClosing.cc#L578-L610">src/LoopClosing.cc:578-610</a></p></section>
+<section class="section"><h2>候选检测的硬阈值</h2><table class="table threshold-table"><tr><th>执行阶段</th><th>源码变量</th><th>值</th></tr><tr><td>BoW 聚合匹配达到门槛后才启动几何验证</td><td>nBoWMatches</td><td>20</td></tr><tr><td>Sim3Solver RANSAC 的最低内点参数</td><td>nBoWInliers</td><td>15</td></tr><tr><td>粗 Sim3 重投影后，投影匹配达到门槛才调用 OptimizeSim3</td><td>nProjMatches</td><td>50</td></tr><tr><td>OptimizeSim3 返回的优化后匹配数门槛</td><td>nSim3Inliers</td><td>20</td></tr><tr><td>再次更严格投影匹配的最终门槛</td><td>nProjOptMatches</td><td>80</td></tr></table><p><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LoopClosing.cc#L578-L610">src/LoopClosing.cc:578-610</a></p></section>
 <section class="section"><h2>连续检测：至少 3 次一致才真正置位</h2><div class="source-card"><div class="source-head"><strong>候选区域的时间一致性</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LoopClosing.cc#L350-L410">src/LoopClosing.cc:350-410</a></div><pre class="codeblock"><code>if(bCommonRegion)
 {
     mnLoopNumCoincidences++;
@@ -20,7 +20,7 @@ else
         ...
     }
 }</code></pre></div></section>
-<section class="section"><h2>Mono+IMU 的 loop 校正还有额外约束</h2><div class="source-card"><div class="source-head"><strong>惯性地图的姿态一致性检查与只保留 yaw</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LoopClosing.cc#L220-L258">src/LoopClosing.cc:220-258</a></div><pre class="codeblock"><code>Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
+<section class="section"><h2>Mono+IMU 的 loop 校正还有额外约束</h2><div class="source-card"><div class="source-head"><strong>惯性地图的 SO(3) 旋转向量一致性检查与源码所谓“only yaw”处理</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LoopClosing.cc#L220-L258">src/LoopClosing.cc:220-258</a></div><pre class="codeblock"><code>Eigen::Vector3d phi = LogSO3(g2oSww_new.rotation().toRotationMatrix());
 if (fabs(phi(0))&lt;0.008f &amp;&amp; fabs(phi(1))&lt;0.008f &amp;&amp; fabs(phi(2))&lt;0.349f)
 {
     if (mpTracker-&gt;mSensor==System::IMU_MONOCULAR &amp;&amp;
@@ -33,7 +33,7 @@ if (fabs(phi(0))&lt;0.008f &amp;&amp; fabs(phi(1))&lt;0.008f &amp;&amp; fabs(phi
     }
 }
 else
-    bGoodLoop = false;</code></pre></div></section>
+    bGoodLoop = false;</code></pre><p class="muted">这里的 <code>phi</code> 是 <code>LogSO3(R)</code> 得到的旋转向量（李代数）分量，不应严格当成 Euler roll/pitch/yaw。源码注释在把 x/y 分量清零、只保留 z 分量时称其为 “force only yaw”。</p></div></section>
 <section class="section"><h2>CorrectLoop：为什么先停 LocalMapping？</h2><div class="source-card"><div class="source-head"><strong>闭环修正开始前冻结局部地图</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LoopClosing.cc#L969-L1105">src/LoopClosing.cc:969-1105</a></div><pre class="codeblock"><code>mpLocalMapper-&gt;RequestStop();
 mpLocalMapper-&gt;EmptyQueue();
 ...

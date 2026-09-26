@@ -40,3 +40,23 @@ Source baseline: `UZ-SLAMLab/ORB_SLAM3 master @ 4452a3c4ab75b1cde34e5505a36ec3f9
 All explanatory source claims should continue to distinguish:
 1. facts directly visible in the fixed upstream source baseline;
 2. teaching interpretation derived from source behavior.
+
+
+## Source-to-page review (2026-09-26)
+
+A second pass compared the learning pages against upstream `UZ-SLAMLab/ORB_SLAM3` at commit `4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4`.
+
+The review checked:
+- dataset IMU cursor/boundary behavior
+- System thread/module wiring
+- Tracking extractor switch and tracking paths
+- monocular initialization thresholds
+- IMU preintegration and initialization gates
+- LocalMapping visual/inertial BA switch and staged VIBA schedule
+- LoopClosing BoW/Sim3/projection threshold execution order
+- inertial loop SO(3) rotation-vector gate
+- Optimizer variable/fixed-vertex descriptions
+- Frame/KeyFrame/MapPoint/Atlas relationship pages
+- Stage 3/4/5/6 interactive or summary pages
+
+Corrections are documented in `SOURCE_REVIEW.md`.
