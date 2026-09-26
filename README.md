@@ -15,12 +15,16 @@
 - [x] **Stage 3 — Tracking.cc 单帧逐步执行器**：沿一次 Mono+IMU 帧处理过程逐步展开调用栈、状态变化和数据变化。
 - [x] **Stage 4 — IMU 数学与源码对应**：预积分、Bias、重力、尺度、速度、惯性初始化与 VIBA。
 - [x] **Stage 5 — 地图后端深挖**：Local Mapping / Loop Closing / Atlas / BA / Sim3 的动态图解。
-- [ ] **Stage 6 — 完整学习闭环**：源码导航、术语索引、知识检查、调试路径与最终 QA。
+- [x] **Stage 6 — 完整学习闭环**：源码导航、术语索引、知识检查、调试路径与最终 QA。
 
 ## 入口
 
 - `index.html`：整体学习站
 - `source_index.html`：Stage 2 源码精读入口
+- `stage3_tracking_executor.html`：Tracking 单帧执行器
+- `stage4_imu_math.html`：IMU 数学与源码对应
+- `stage5_backend_graph.html`：地图后端深挖
+- `stage6_learning_hub.html`：最终源码导航与调试闭环
 
 ## 提交规则
 
