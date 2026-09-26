@@ -1,21 +1,13 @@
-
+/* Shared entry for all existing pages. The original HTML remains the no-JS fallback. */
 (() => {
-  const path = location.pathname.split('/').pop() || 'index.html';
-  document.querySelectorAll('nav.main a').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href === path) a.classList.add('active');
-  });
-  document.querySelectorAll('[data-copy]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const target = document.querySelector(btn.dataset.copy);
-      if(!target) return;
-      try {
-        await navigator.clipboard.writeText(target.textContent.trim());
-        btn.textContent = '已复制';
-        setTimeout(() => btn.textContent = '复制', 1200);
-      } catch(e) {
-        btn.textContent = '复制失败';
-      }
-    });
-  });
+ 'use strict';
+ // Remove decorative canvases before legacy mini3d.js starts an animation loop.
+ document.querySelectorAll('.mini3d').forEach(el=>el.remove());
+ const base=new URL('.',document.currentScript.src);
+ const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('book.css',base).href;
+ document.head.appendChild(css);
+ const load=name=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=new URL(name,base).href;s.onload=resolve;s.onerror=reject;document.head.appendChild(s);});
+ load('book-data.js').then(()=>load('book-examples.js')).then(()=>load('book.js')).catch(()=>{
+  const n=document.createElement('p');n.textContent='新版阅读资源未能加载，当前是旧版静态备份。请保留完整 assets 目录，并用本地 HTTP 服务打开新版。';n.setAttribute('role','alert');document.body.prepend(n);
+ });
 })();
