@@ -1,0 +1,35 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stage 3：Tracking 单帧执行器</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"><link rel="stylesheet" href="assets/stage3.css"></head><body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · Stage 3</div><nav class="main"><a href="index.html">首页</a><a href="source_index.html">源码精读</a><a href="stage3_tracking_executor.html" class="active">Tracking 执行器</a></nav></div></header>
+<section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 3 · Tracking.cc execution path</div><h1>一次 Mono+IMU 图像到底怎么走完 Tracking？</h1><p>修改左侧状态，再逐步执行。这里不是虚构算法流程，而是把官方 <code>TrackMonocular → GrabImageMonocular → Track</code> 的关键分支压缩成可交互路线。</p><div class="button-row"><a class="btn" href="source_index.html">返回 Stage 2</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="tracking"></div></div></section>
+<main class="container" data-stage3>
+<section class="section stage3-layout">
+<aside class="card control-panel"><h2>输入当前运行状态</h2>
+<label>Tracking 状态</label><select name="state"><option value="OK">OK</option><option value="NOT_INITIALIZED">NOT_INITIALIZED</option></select>
+<div class="check-row"><input type="checkbox" name="imu" id="imu" checked><label for="imu">Map 已完成 IMU 初始化</label></div>
+<div class="check-row"><input type="checkbox" name="velocity" id="velocity" checked><label for="velocity">已有运动模型 mVelocity</label></div>
+<div class="check-row"><input type="checkbox" name="mapUpdated" id="mapUpdated"><label for="mapUpdated">本帧发现地图已被后端更新</label></div>
+<label>当前局部地图内点 mnMatchesInliers</label><input type="number" name="inliers" value="80" min="0">
+<label>参考关键帧有效地图点 nRefMatches</label><input type="number" name="ref" value="120" min="1">
+<label>距上一关键帧时间 Δt (s)</label><input type="number" step="0.05" name="dt" value="0.3" min="0">
+<div class="exec-actions"><button data-prev>上一步</button><button data-next>下一步</button><button data-reset>重置</button></div></aside>
+
+<div>
+<div class="state-strip"><div class="state-item"><b>STATE</b><span data-state="state"></span></div><div class="state-item"><b>IMU</b><span data-state="imu"></span></div><div class="state-item"><b>POSE ROUTE</b><span data-state="route"></span></div><div class="state-item"><b>NEW KF?</b><span data-state="kf"></span></div></div>
+<div class="route-summary"></div>
+
+<div class="exec-step" data-step="system"><span class="num">1</span><h3>System::TrackMonocular</h3><p>先处理 reset / localization mode；在 <code>IMU_MONOCULAR</code> 下逐个调用 <code>GrabImuData()</code>，然后调用 <code>GrabImageMonocular()</code>。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/System.cc#L399-L476">System.cc L399–476</a></div>
+<div class="exec-step" data-step="grab"><span class="num">2</span><h3>Tracking::GrabImageMonocular</h3><p>RGB/BGR → 灰度；Mono+IMU 未初始化时使用 <code>mpIniORBextractor</code> 构造 Frame，正常后切换到 <code>mpORBextractorLeft</code>；最后调用 <code>Track()</code>。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L1566-L1614">Tracking.cc L1566–1614</a></div>
+<div class="exec-step" data-step="preimu"><span class="num">3</span><h3>PreintegrateIMU</h3><p>惯性模式下，<code>Track()</code> 在进入初始化/正常跟踪分支前执行预积分，把帧间 IMU 样本压成相对运动约束。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L1859-L1883">Tracking.cc L1859–1883</a></div>
+<div class="exec-step" data-step="mono_init"><span class="num">4</span><h3>MonocularInitialization</h3><p><code>NOT_INITIALIZED</code> 时走单目初始化：首候选帧需要 >100 特征，下一候选需 ≥100 初始化匹配，再进行两视图重建。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2448-L2521">Tracking.cc L2448–2521</a></div>
+<div class="exec-step" data-step="track"><span class="num">4</span><h3>Track 正常状态机</h3><p>已初始化后先求初始位姿估计，再执行 Local Map 跟踪；失败时转 RECENTLY_LOST/LOST，并依据惯性初始化状态决定 reset 或新建 Map。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L1910-L2200">Tracking.cc 主状态机</a></div>
+<div class="exec-step" data-step="ref"><span class="num">5</span><h3>TrackReferenceKeyFrame</h3><p>计算当前 Frame 的 BoW，与参考 KF 做 <code>SearchByBoW</code>。源码要求初始匹配至少 15，然后执行 <code>PoseOptimization</code> 并剔除 outliers。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2720-L2775">Tracking.cc L2720–2775</a></div>
+<div class="exec-step" data-step="motion"><span class="num">5</span><h3>TrackWithMotionModel</h3><p>如果 IMU 已初始化且越过重定位后的 reset 窗口，函数直接 <code>PredictStateIMU()</code> 并返回；否则用 <code>mVelocity * lastPose</code> 做视觉运动模型预测。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2854-L2948">Tracking.cc L2854–2948</a></div>
+<div class="exec-step" data-step="local"><span class="num">6</span><h3>TrackLocalMap</h3><p><code>UpdateLocalMap → SearchLocalPoints</code> 后优化位姿。IMU 未初始化使用普通 PoseOptimization；初始化后会选择 LastFrame/LastKeyFrame 惯性位姿优化。Mono+IMU 成功门槛：未初始化 ≥50 inliers，初始化后 ≥15。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2949-L3063">Tracking.cc L2949–3063</a></div>
+<div class="exec-step" data-step="needkf"><span class="num">7</span><h3>NeedNewKeyFrame</h3><p>IMU 未初始化时，Mono+IMU 每隔 ≥0.25s 可直接允许关键帧；惯性正常后还考虑参考 KF 匹配比例、LocalMapping idle、Δt≥0.5s 和弱跟踪条件。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L3064-L3215">Tracking.cc L3064–3215</a></div>
+<div class="exec-step" data-step="createkf"><span class="num">8</span><h3>CreateNewKeyFrame</h3><p>从当前 Frame 构造 KeyFrame，写入 bias，连接 <code>mPrevKF/mNextKF</code>，新建“从该 KF 开始”的预积分对象，然后 <code>InsertKeyFrame</code> 交给 LocalMapping。</p><a class="src-link" target="_blank" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L3216-L3341">Tracking.cc L3216–3341</a></div>
+<div class="note warn"><strong>执行器边界：</strong>它刻意只保留 Mono+IMU 的主分支。完整 <code>Track()</code> 还包含 localization-only、relocalization、timestamp jump、recently lost、Atlas 新地图创建等分支；这些内容将在后续调试与故障章节单独展开。</div>
+</div>
+</section>
+</main>
+<div class="footer">源码基线：UZ-SLAMLab/ORB_SLAM3 master @ 4452a3c4。交互路线只用于映射官方代码分支，不用于替代源码本身。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/stage3.js"></script></body></html>
