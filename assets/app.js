@@ -1,13 +1,13 @@
-/* Shared entry for all existing pages. The original HTML remains the no-JS fallback. */
+/* Shared entry. Keep the approved reader, with independently versioned chapter content. */
 (() => {
  'use strict';
- // Remove decorative canvases before legacy mini3d.js starts an animation loop.
  document.querySelectorAll('.mini3d').forEach(el=>el.remove());
  const base=new URL('.',document.currentScript.src);
- const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('book.css',base).href;
- document.head.appendChild(css);
- const load=name=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=new URL(name,base).href;s.onload=resolve;s.onerror=reject;document.head.appendChild(s);});
- load('book-data.js').then(()=>load('book-examples.js')).then(()=>load('book.js')).catch(()=>{
-  const n=document.createElement('p');n.textContent='新版阅读资源未能加载，当前是旧版静态备份。请保留完整 assets 目录，并用本地 HTTP 服务打开新版。';n.setAttribute('role','alert');document.body.prepend(n);
+ for(const name of ['book.css','chapters/deep.css']){const css=document.createElement('link');css.rel='stylesheet';css.href=new URL(name,base).href;document.head.appendChild(css);}
+ const load=name=>new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=new URL(name,base).href;s.onload=resolve;s.onerror=()=>reject(Error('Could not load '+name));document.head.appendChild(s);});
+ load('book-data.js').then(()=>load('book-examples.js')).then(()=>load('chapters/runtime.js'))
+ .then(()=>Promise.all(window.ORB_BOOK.chapters.map(c=>load('chapters/'+c.id+'.js'))))
+ .then(()=>load('book.js')).then(()=>window.ORB_DEEP.mount()).catch(error=>{
+  console.error(error);const n=document.createElement('p');n.textContent='新版章节资源未能完整加载。请 git pull，保留整个 assets/chapters 目录并强制刷新；推荐从本地 HTTP 服务访问。';n.setAttribute('role','alert');document.body.prepend(n);
  });
 })();

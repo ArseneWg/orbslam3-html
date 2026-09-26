@@ -1,0 +1,18 @@
+/* Only new teaching figures, tables and worked examples; no font/theme overrides. */
+body.book .d-equation{display:block;background:var(--code);border-left:3px solid #acc5ac;padding:18px 20px;margin:22px 0;font:14px/2 var(--mono);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+body.book .d-equation small{display:block;font:13px/1.85 var(--sans);color:var(--subtle);white-space:normal;margin-top:8px}
+body.book .d-note{display:block;border-left:3px solid #99b5a0;background:var(--wash);padding:17px 20px;margin:22px 0;font-size:.94em}
+body.book .d-note>strong,body.book .d-note>span{display:block}body.book .d-note>strong{margin-bottom:7px}
+body.book .d-figure{display:block;border:1px solid var(--stroke);border-radius:9px;background:var(--canvas);padding:20px;margin:26px 0;max-width:100%;overflow:hidden}
+body.book .d-caption-top{display:block;font:600 14px/1.8 var(--sans);color:var(--green);margin-bottom:15px}
+body.book .d-caption{display:block;color:var(--subtle);font:12px/1.9 var(--sans);margin-top:15px}
+body.book .d-diagram-scroll{display:block;overflow-x:auto;max-width:100%;overscroll-behavior-x:contain}
+body.book .d-diagram-scroll svg{display:block;width:100%;min-width:720px;height:auto}body.book .d-diagram-scroll svg text{font-family:var(--sans);fill:var(--ink)}
+body.book .d-table-wrap{display:block;overflow:auto;max-width:100%;margin:24px 0;overscroll-behavior-x:contain}
+body.book .d-table{display:block;min-width:510px;font-size:14px;line-height:1.85}
+body.book .d-row{display:grid;border-bottom:1px solid var(--stroke)}body.book .d-row>span{padding:12px 10px;min-width:0;overflow-wrap:anywhere}
+body.book .d-head{background:var(--wash);font-weight:600}
+body.book .d-lab,body.book .d-lab-result{display:block}body.book .d-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px}
+body.book .d-controls label{display:block;font-size:13px}body.book .d-controls input{display:block;width:100%;accent-color:var(--green)}body.book .d-controls output{font:13px var(--mono);color:var(--green)}
+body.book .d-lab-result{font:14px/1.95 var(--mono);margin-top:18px;border-top:1px solid var(--stroke);padding-top:15px;overflow-wrap:anywhere}
+@media(max-width:600px){body.book .d-figure{padding:13px}body.book .d-controls{grid-template-columns:1fr}body.book .d-equation{padding:14px}}
