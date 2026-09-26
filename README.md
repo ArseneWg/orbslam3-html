@@ -12,7 +12,7 @@
 
 - [x] **Stage 1 — 框架认知**：完整流程、System、Tracking、初始化、IMU、Local Mapping、Loop Closing、Optimizer、数据结构。
 - [x] **Stage 2 — 源码函数级精读**：真实函数调用、源码阈值、成员变量、BoW/ORB、图优化与源码行号链接。
-- [ ] **Stage 3 — Tracking.cc 单帧逐步执行器**：沿一次 Mono+IMU 帧处理过程逐步展开调用栈、状态变化和数据变化。
+- [x] **Stage 3 — Tracking.cc 单帧逐步执行器**：沿一次 Mono+IMU 帧处理过程逐步展开调用栈、状态变化和数据变化。
 - [ ] **Stage 4 — IMU 数学与源码对应**：预积分、Bias、重力、尺度、速度、惯性初始化与 VIBA。
 - [ ] **Stage 5 — 地图后端深挖**：Local Mapping / Loop Closing / Atlas / BA / Sim3 的动态图解。
 - [ ] **Stage 6 — 完整学习闭环**：源码导航、术语索引、知识检查、调试路径与最终 QA。
