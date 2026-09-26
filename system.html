@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>System 启动：总入口如何装配整套 SLAM</title><link rel="stylesheet" href="assets/styles.css" /></head>
+<body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html">总览</a><a href="overview.html">框架总览</a><a href="entry.html">数据入口</a><a href="system.html" class="active">System 启动</a><a href="tracking.html">Tracking 前端</a><a href="init.html">单目初始化</a><a href="imu.html">IMU 预积分</a><a href="local_mapping.html">Local Mapping</a><a href="loop_closing.html">Loop Closing</a><a href="optimizer.html">Optimizer</a><a href="data_structures.html">核心数据结构</a></nav></div></header>
+<section class="hero"><div class="panel hero-left"><div class="badge">基于 ORB-SLAM3 官方源码结构整理</div><h1>System 启动：总入口如何装配整套 SLAM</h1><p>看清 System 之后，你就知道 Tracking、LocalMapping、LoopClosing 到底是怎么被拉起来并彼此连接的。</p><div class="button-row"><a class="btn primary" href="index.html">回到首页</a><a class="btn" href="#sources">查看源码锚点</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="system"></div></div></section>
+<main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>System 是“装配工厂”</h2><p><code>System</code> 并不直接完成所有算法，而是把词袋、地图、关键帧数据库、Tracker、LocalMapping、LoopClosing、Viewer 等对象组合起来。你可以把它理解成整个 SLAM 程序的“总配电箱”。</p><ul class="simple-list"><li>加载 ORB 词袋（BoW 所需）。</li><li>读取设置文件，初始化相机与参数。</li><li>创建 <code>Atlas</code> 与 <code>KeyFrameDatabase</code>。</li><li>创建 <code>Tracking</code> / <code>LocalMapping</code> / <code>LoopClosing</code> / <code>Viewer</code>。</li><li>拉起后台线程，并在成员之间互相注入指针。</li></ul></div><div class="card"><h2>外部最关键的接口</h2><pre>System(const string &amp;voc, const string &amp;settings,
+       eSensor sensor, bool bUseViewer = true, ...)
+
+Sophus::SE3f TrackMonocular(const cv::Mat &amp;im,
+       const double &amp;timestamp,
+       const vector&lt;IMU::Point&gt;&amp; vImuMeas = {},
+       string filename = "");</pre><p class="muted">这两个接口已经足够说明：系统先在构造期固定传感器模式，再在运行期逐帧喂数据。</p></div></div></section>
+<section class="section"><h2>System::TrackMonocular 做了什么？</h2><div class="card"><div class="callstack"><ol><li>处理模式切换与复位请求（例如只定位模式 / SLAM 模式、重置地图）。</li><li>如果当前模式带 IMU，则把 <code>vImuMeas</code> 中的每个 IMU 样本交给 <code>mpTracker-&gt;GrabImuData()</code>。</li><li>调用 <code>mpTracker-&gt;GrabImageMonocular()</code> 真正执行当前帧跟踪。</li><li>把 Tracking 的状态、当前跟踪到的地图点与关键点缓存到 System 层，供外部查询。</li></ol></div><div class="note success">这一步说明一个很重要的设计：<strong>System 本身尽量薄</strong>。它主要做线程与模块管理，而把视觉/惯性细节留给 Tracking 和后端线程。</div></div></section>
+<section class="section"><div class="grid two"><div class="card"><h3>模块连接关系</h3><ul class="simple-list"><li><code>Tracking</code> 持有对 Atlas、KeyFrameDatabase、LocalMapping、LoopClosing、Viewer 的访问或回调连接。</li><li><code>LocalMapping</code> 与 <code>LoopClosing</code> 也需要访问 Atlas / Tracker / Database，才能共享地图对象与图优化结果。</li><li>这种“互相知道彼此”的结构会让源码看起来耦合较重，但它换来了运行时跨线程协作的便利。</li></ul></div><div class="card"><h3>作为读码者，你此处应该抓住什么？</h3><ul class="simple-list"><li>Sensor 模式在构造时就固定，不是在 Tracking 内部临时猜测。</li><li><code>TrackMonocular</code> 是你顺藤摸瓜去 <code>GrabImageMonocular</code> 的桥。</li><li>System 层缓存 Tracking 状态，因此外部程序不需要深入 Tracker 也能取到最近位姿与跟踪状态。</li></ul></div></div></section>
+<section class="section" id="sources"><h2>源码锚点</h2><div class="card"><ul class="simple-list source-list"><li><code>include/System.h</code>：构造函数、<code>TrackMonocular()</code>、模式切换、重置与轨迹保存接口。</li><li><code>src/System.cc</code>：系统对象装配、线程创建、IMU 数据转交 <code>GrabImuData()</code>、调用 <code>GrabImageMonocular()</code>。</li></ul></div></section>
+</main>
+<div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script></body></html>
