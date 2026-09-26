@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>框架总览：ORB-SLAM3 Mono + IMU</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="active">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  <section class="hero">
+    <div class="panel hero-left">
+      <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+      <h1>框架总览：ORB-SLAM3 Mono + IMU</h1>
+      <p>先把线程、对象、调用链捋顺：你才能在 Tracking、LocalMapping、LoopClosing 之间不迷路。</p>
+      <div class="button-row"><a class="btn primary" href="index.html">回到首页</a><a class="btn" href="#sources">查看源码锚点</a></div>
+    </div>
+    <div class="panel hero-right"><div class="mini3d" data-scene="overview"></div></div>
+  </section>
+  <main class="container">
+    <section class="section">
+      <div class="grid two">
+        <div class="card">
+          <h2>全局认知图</h2>
+          <p>从工程视角看，ORB-SLAM3 并不是“一坨算法”，而是一个被 <strong>System</strong> 组织起来的多线程系统。前台由 <strong>Tracking</strong> 接受每一帧图像；后台由 <strong>LocalMapping</strong> 吃入关键帧并扩展局部地图；另一个后台线程 <strong>LoopClosing</strong> 负责闭环检测与地图合并；<strong>Optimizer</strong> 则作为公共后端，为这些模块提供位姿和地图优化能力。</p>
+          <div class="legend"><span><i style="background:#67d5ff"></i>位姿/关键帧</span><span><i style="background:#8cffb7"></i>地图点</span><span><i style="background:#ffd166"></i>IMU 样本</span><span><i style="background:#f49ac2"></i>轨迹/流程</span></div>
+        </div>
+        <div class="card">
+          <h2>核心线程关系</h2>
+          <ul class="simple-list">
+            <li><strong>主调用线程：</strong>例子程序或你的应用程序不断调用 <code>System::TrackMonocular()</code>。</li>
+            <li><strong>Tracking 线程：</strong>严格来说，<code>TrackMonocular()</code> 直接把图像交给 Tracker，前端跟踪在调用线程内完成。</li>
+            <li><strong>LocalMapping 线程：</strong>独立后台线程，排队处理新关键帧。</li>
+            <li><strong>LoopClosing 线程：</strong>独立后台线程，排队处理回环候选和地图合并。</li>
+            <li><strong>Viewer 线程：</strong>若启用可视化，则异步绘图。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    <section class="section">
+      <h2>总调用链（从数据到地图）</h2>
+      <div class="card">
+        <div class="callstack">
+          <ol>
+            <li><code>Examples/Monocular-Inertial/mono_inertial_*.cc</code> 读取图像与 IMU，按相邻图像时间窗组装 <code>vector&lt;IMU::Point&gt;</code>。</li>
+            <li>调用 <code>System::TrackMonocular(im, timestamp, vImuMeas)</code>。</li>
+            <li><code>System</code> 先把 IMU 样本逐个喂给 <code>Tracking::GrabImuData()</code>，再调用 <code>Tracking::GrabImageMonocular()</code>。</li>
+            <li><code>Tracking</code> 创建当前 <code>Frame</code>，执行状态机：初始化 / 跟踪 / 重定位 / 局部地图跟踪 / 新关键帧判定。</li>
+            <li>若产生关键帧，则交给 <code>LocalMapping</code> 线程处理。</li>
+            <li><code>LocalMapping</code> 维护局部地图：创建/裁剪关键帧与地图点，执行局部优化；在单目惯性模式下还会触发 <code>InitializeIMU</code>。</li>
+            <li><code>LoopClosing</code> 线程基于 BoW + 几何一致性查找闭环或可合并地图，并进行全局校正。</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+    <section class="section">
+      <div class="grid two">
+        <div class="card">
+          <h3>为什么要把「单目初始化」和「IMU 初始化」分开看？</h3>
+          <p>因为在 Mono + IMU 模式下，系统通常先走完一轮<strong>纯视觉的单目初始化</strong>：获得初始关键帧、相对位姿和一批三角化地图点。但单目视觉天然存在<strong>绝对尺度不确定</strong>，所以仅靠这一步还不能稳定得到带真实尺度的运动估计。真正把视觉地图升级为视觉惯性地图的，是后续在 <code>LocalMapping</code> 中完成的 <strong>IMU 初始化</strong>：估计重力方向、尺度、速度、偏置，并把 IMU 约束引入优化。</p>
+        </div>
+        <div class="card">
+          <h3>这套源码该怎么读最省力？</h3>
+          <table class="table">
+            <tr><th>目标</th><th>优先文件</th></tr>
+            <tr><td>看入口</td><td><code>Examples/Monocular-Inertial/mono_inertial_*.cc</code></td></tr>
+            <tr><td>看总装配</td><td><code>include/System.h</code>、<code>src/System.cc</code></td></tr>
+            <tr><td>看主状态机</td><td><code>include/Tracking.h</code>、<code>src/Tracking.cc</code></td></tr>
+            <tr><td>看局部地图/IMU 初始化</td><td><code>src/LocalMapping.cc</code></td></tr>
+            <tr><td>看闭环与合图</td><td><code>src/LoopClosing.cc</code></td></tr>
+            <tr><td>看公共优化</td><td><code>src/Optimizer.cc</code></td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section class="section" id="sources">
+      <h2>源码锚点</h2>
+      <div class="card">
+        <ul class="simple-list source-list">
+          <li><code>include/System.h</code>：系统构造函数、<code>TrackMonocular/TrackStereo/TrackRGBD</code> 接口、轨迹输出函数。</li>
+          <li><code>src/System.cc</code>：构造系统对象、把 IMU 数据送给 Tracker、保存 Tracking 状态。</li>
+          <li><code>include/Tracking.h</code>：<code>GrabImageMonocular</code>、<code>Track</code>、初始化、重定位、新关键帧判定等接口。</li>
+          <li><code>src/Tracking.cc</code>：前端主状态机与视觉惯性分支实现。</li>
+          <li><code>src/LocalMapping.cc</code>：新关键帧处理、局部 BA、IMU 初始化。</li>
+          <li><code>src/LoopClosing.cc</code>：闭环检测、地图合并、图校正。</li>
+          <li><code>src/Optimizer.cc</code>：位姿优化、局部/全局 BA、惯性优化。</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script><script src="assets/mini3d.js"></script>
+</body>
+</html>
