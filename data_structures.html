@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>核心数据结构：Frame / KeyFrame / MapPoint / Atlas</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="active">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>核心数据结构：Frame / KeyFrame / MapPoint / Atlas</h1>
+        <p>SLAM 源码的很多复杂感，其实来自对象关系。搞懂这些类，后面的代码就不再像一团线。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="structures"></div>
+      </div>
+    </section>
+    
+  <main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>从对象关系读懂系统</h2>
+      <p>很多人读 ORB-SLAM3 卡住，不是因为公式太难，而是因为对象太多。你只要先掌握下面几个类的角色，代码会清晰很多。</p>
+      <div class="pillnav">
+        <a href="#frame">Frame</a>
+        <a href="#keyframe">KeyFrame</a>
+        <a href="#mappoint">MapPoint</a>
+        <a href="#map">Map / Atlas</a>
+        <a href="#db">KeyFrameDatabase</a>
+        <a href="#voc">ORBVocabulary</a>
+      </div>
+    </div>
+    <div class="card">
+      <h2>对象关系一句话版</h2>
+      <ul class="simple-list">
+        <li><strong>Frame：</strong>当前临时观测容器。</li>
+        <li><strong>KeyFrame：</strong>被长期保留并参与建图/闭环的 Frame。</li>
+        <li><strong>MapPoint：</strong>被多个关键帧观测到的 3D 点。</li>
+        <li><strong>Map：</strong>一张地图中的关键帧与地图点集合。</li>
+        <li><strong>Atlas：</strong>多张 Map 的管理器。</li>
+        <li><strong>KeyFrameDatabase：</strong>做 BoW 检索的数据库。</li>
+        <li><strong>ORBVocabulary：</strong>BoW 词典。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>对象关系表</h2>
+  <div class="card">
+    <table class="table">
+      <tr><th>对象</th><th>存什么</th><th>谁创建 / 谁主要使用</th><th>生命周期</th></tr>
+      <tr id="frame"><td>Frame</td><td>当前图像的关键点、描述子、位姿、与地图点的当前关联</td><td>Tracking 构造并使用</td><td>短：按帧存在</td></tr>
+      <tr id="keyframe"><td>KeyFrame</td><td>长期保留的关键帧、BoW、共视关系、观测关系</td><td>Tracking 创建，LocalMapping/LoopClosing 长期使用</td><td>长：直到被裁剪</td></tr>
+      <tr id="mappoint"><td>MapPoint</td><td>3D 位置、描述子、法向、可见性统计、被哪些关键帧观测</td><td>初始化/局部建图创建，全系统共享</td><td>长：直到被判坏点</td></tr>
+      <tr id="map"><td>Map / Atlas</td><td>地图集合、活动地图、关键帧与地图点组织</td><td>System 创建，全系统共享</td><td>贯穿全局</td></tr>
+      <tr id="db"><td>KeyFrameDatabase</td><td>基于 BoW 的关键帧倒排索引/检索结构</td><td>System 创建，Tracking/LoopClosing 使用</td><td>贯穿全局</td></tr>
+      <tr id="voc"><td>ORBVocabulary</td><td>BoW 词典</td><td>System 加载，Frame/KeyFrame/Database 使用</td><td>贯穿全局</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid three">
+    <div class="card"><h3>Frame 与 KeyFrame 的差异</h3><p>不要把它们混成一个概念。Frame 是前端的连续时间载体；KeyFrame 是后端的离散图节点。所有 KeyFrame 都是由某个 Frame 升级而来，但不是每个 Frame 都能变成 KeyFrame。</p></div>
+    <div class="card"><h3>MapPoint 的本质</h3><p>不是“点云里随便一个点”，而是带有多帧观测关系、可见性统计与代表性描述子的图结构节点。</p></div>
+    <div class="card"><h3>Atlas 的意义</h3><p>Atlas 让 ORB-SLAM3 能管理多张地图，这也是它支持地图合并和更复杂长期运行行为的基础。</p></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h3>对象之间如何相互引用？</h3>
+      <ul class="simple-list">
+        <li>Frame 会临时关联一些 MapPoint。</li>
+        <li>KeyFrame 长期持有对其观测到的 MapPoint 的引用。</li>
+        <li>MapPoint 反过来记录自己被哪些 KeyFrame 观测到。</li>
+        <li>Map 持有 KeyFrame 和 MapPoint 容器。</li>
+        <li>Atlas 管理一个或多个 Map，并维护 active map。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>建议的源码阅读顺序</h3>
+      <ol class="simple-list">
+        <li>先看 <code>Frame.h/.cc</code>：当前帧里有哪些成员。</li>
+        <li>再看 <code>KeyFrame.h/.cc</code>：哪些成员被“长期化”了。</li>
+        <li>再看 <code>MapPoint.h/.cc</code>：3D 点如何维护观测关系。</li>
+        <li>最后看 <code>Map.h/.cc</code> 与 <code>Atlas.h/.cc</code>：地图层级如何组织。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码锚点</h2>
+  <div class="card"><ul class="simple-list source-list">
+    <li><code>include/Frame.h</code> / <code>src/Frame.cc</code></li>
+    <li><code>include/KeyFrame.h</code> / <code>src/KeyFrame.cc</code></li>
+    <li><code>include/MapPoint.h</code> / <code>src/MapPoint.cc</code></li>
+    <li><code>include/Map.h</code> / <code>src/Map.cc</code></li>
+    <li><code>include/Atlas.h</code> / <code>src/Atlas.cc</code></li>
+    <li><code>include/KeyFrameDatabase.h</code> / <code>src/KeyFrameDatabase.cc</code></li>
+    <li><code>include/ORBVocabulary.h</code></li>
+  </ul></div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

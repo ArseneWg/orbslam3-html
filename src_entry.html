@@ -1,0 +1,25 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>入口精读：IMU 怎样被切成“帧间数据包”</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="active">入口精读</a><a href="src_system.html" class="">System 精读</a><a href="src_orb.html" class="">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="">初始化精读</a><a href="src_imu.html" class="">IMU 精读</a><a href="src_local_mapping.html" class="">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="">Optimizer 精读</a><a href="src_objects.html" class="">对象与图结构</a></nav></div></header>
+<section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>入口精读：IMU 怎样被切成“帧间数据包”</h1><p>这一页不讲泛泛的“传感器融合”，只沿 EuRoC 单目惯性例子的真实 for/while 循环解释数据怎么进入系统。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="entry"></div></div></section>
+<main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>源码真实输入形状</h2><p>EuRoC 例子先分别读取图像、IMU，然后在处理每张图像前，把所有 <code>t_imu &lt;= t_camera</code> 的 IMU 样本压入 <code>vImuMeas</code>，最终一次性传给 <code>TrackMonocular</code>。</p><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>图像是主节拍</h3><p>例子循环以图像索引 ni 前进；IMU 通过 while 条件追到当前图像时间戳。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>这不是硬件同步器</h3><p>代码行为表明核心 API 接受“一帧图像 + 一段 IMU 序列”，所以时间同步策略在输入层就很重要。</p></div></div><div class="card"><h2>调用链</h2><div class="source-chain"><span class="box">LoadImages</span><span class="call-arrow">→</span><span class="box">LoadIMU</span><span class="call-arrow">→</span><span class="box">vImuMeas</span><span class="call-arrow">→</span><span class="box">TrackMonocular</span></div><p class="muted">后面的 System 不再关心“数据来自 CSV 还是实时驱动”，它只看到统一后的输入。</p></div></div></section>
+<section class="section"><h2>核心源码</h2><div class="source-card"><div class="source-head"><strong>帧间 IMU 打包 → TrackMonocular</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/Examples/Monocular-Inertial/mono_inertial_euroc.cc#L150-L195">Examples/Monocular-Inertial/mono_inertial_euroc.cc:150-195</a></div><pre class="codeblock"><code>vector&lt;IMU::Point&gt; vImuMeas;
+if(ni&gt;0)
+    while(vTimestampsImu[seq][first_imu[seq]] &lt;= vTimestampsCam[seq][ni])
+    {
+        vImuMeas.push_back(ORB_SLAM3::IMU::Point(
+            vAcc[seq][first_imu[seq]].x,
+            vAcc[seq][first_imu[seq]].y,
+            vAcc[seq][first_imu[seq]].z,
+            vGyro[seq][first_imu[seq]].x,
+            vGyro[seq][first_imu[seq]].y,
+            vGyro[seq][first_imu[seq]].z,
+            vTimestampsImu[seq][first_imu[seq]]));
+        first_imu[seq]++;
+    }
+
+SLAM.TrackMonocular(im, tframe, vImuMeas);</code></pre></div></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>first_imu 是游标</h3><p>它不会每帧从 IMU 数组头部重新扫描，而是持续前进；因此每个 IMU 样本只会被消费一次。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>vImuMeas 的边界由当前相机时间戳决定</h3><p>while 条件直接使用当前图像时间戳；这决定了进入 TrackMonocular 的 IMU 时间窗。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>TrackMonocular 每帧只调用一次</h3><p>例子在每张图像的循环中调用一次核心接口。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>接入实时设备时应保留同样的数据契约</h3><p>实时驱动可不同，但最好仍把“截至当前图像时间”的 IMU 包组装成同类向量。</p></div></div></section>
+</main>
+<div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code>，官方 <code>master</code>，commit <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。页面中“源码直接可见”仅陈述代码本身；“由源码行为推导”用于解释代码设计含义，并明确与直接事实区分。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>

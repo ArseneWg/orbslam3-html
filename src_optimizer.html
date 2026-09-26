@@ -1,0 +1,48 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Optimizer 精读：先看变量和边，再看公式</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="">入口精读</a><a href="src_system.html" class="">System 精读</a><a href="src_orb.html" class="">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="">初始化精读</a><a href="src_imu.html" class="">IMU 精读</a><a href="src_local_mapping.html" class="">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="active">Optimizer 精读</a><a href="src_objects.html" class="">对象与图结构</a></nav></div></header>
+<section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>Optimizer 精读：先看变量和边，再看公式</h1><p>从 g2o 顶点/边构造出发，弄清 Pose-only、视觉 Local BA、Local Inertial BA、惯性初始化分别在优化什么。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="optimizer"></div></div></section>
+<main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>PoseOptimization</h2><p>这里只优化<strong>当前 Frame 的一个 SE3 位姿顶点</strong>，MapPoint 世界坐标通过边里的 <code>Xw</code> 固定使用。</p><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>单目边是 2D 重投影边</h3><p><code>EdgeSE3ProjectXYZOnlyPose</code>，measurement=(u,v)。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>使用 Huber robust kernel</h3><p>deltaMono=<code>sqrt(5.991)</code>，对应源码硬编码阈值。</p></div></div><div class="card"><h2>LocalBundleAdjustment</h2><p>Local BA 会收集三类集合：local KFs、它们看到的 local MPs、以及“能看到这些 MPs 但不属于 local KFs”的 fixed KFs。</p><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>至少要有 fixed KF</h3><p><code>num_fixedKF == 0</code> 时直接 abort LBA。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>初始 KF 会被固定</h3><p>KeyFrame vertex 的 fixed 条件是 <code>mnId==GetInitKFid()</code>。</p></div></div></div></section>
+<section class="section"><h2>PoseOptimization 的图结构</h2><div class="source-card"><div class="source-head"><strong>当前帧 Pose-only 优化</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Optimizer.cc#L814-L900">src/Optimizer.cc:814-900</a></div><pre class="codeblock"><code>g2o::VertexSE3Expmap *vSE3 = new g2o::VertexSE3Expmap();
+vSE3-&gt;setEstimate(...pFrame-&gt;GetPose()...);
+vSE3-&gt;setFixed(false);
+optimizer.addVertex(vSE3);
+...
+EdgeSE3ProjectXYZOnlyPose* e = new EdgeSE3ProjectXYZOnlyPose();
+e-&gt;setVertex(0, optimizer.vertex(0));
+e-&gt;setMeasurement(obs);
+e-&gt;setInformation(Eigen::Matrix2d::Identity()*invSigma2);
+RobustKernelHuber* rk = new RobustKernelHuber;
+rk-&gt;setDelta(sqrt(5.991));
+e-&gt;Xw = pMP-&gt;GetWorldPos().cast&lt;double&gt;();
+optimizer.addEdge(e);</code></pre></div></section>
+<section class="section"><h2>Local BA 的窗口如何被构造？</h2><div class="source-card"><div class="source-head"><strong>共视图定义视觉 Local BA 窗口</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Optimizer.cc#L1116-L1185">src/Optimizer.cc:1116-1185</a></div><pre class="codeblock"><code>lLocalKeyFrames.push_back(pKF);
+const vector&lt;KeyFrame*&gt; vNeighKFs = pKF-&gt;GetVectorCovisibleKeyFrames();
+for(KeyFrame* pKFi : vNeighKFs)
+    if(!pKFi-&gt;isBad() &amp;&amp; pKFi-&gt;GetMap() == pCurrentMap)
+        lLocalKeyFrames.push_back(pKFi);
+
+// 收集 local KFs 观测到的 local MapPoints
+...
+// 再找“观察这些点、但不属于 local KFs”的 fixed cameras</code></pre></div></section>
+<section class="section"><h2>LocalInertialBA 的窗口结构不一样</h2><p>源码首先沿 <code>mPrevKF</code> 向前取时间链，而不是简单把所有共视邻居都作为优化关键帧；默认最多 10 个，<code>bLarge</code> 时最多 25 个。</p><div class="source-card"><div class="source-head"><strong>惯性 Local BA 优先取时间相邻关键帧</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Optimizer.cc#L2383-L2415">src/Optimizer.cc:2383-2415</a></div><pre class="codeblock"><code>int maxOpt=10;
+int opt_it=10;
+if(bLarge)
+{
+    maxOpt=25;
+    opt_it=4;
+}
+...
+vpOptimizableKFs.push_back(pKF);
+for(int i=1; i&lt;Nd; i++)
+{
+    if(vpOptimizableKFs.back()-&gt;mPrevKF)
+        vpOptimizableKFs.push_back(vpOptimizableKFs.back()-&gt;mPrevKF);
+    else
+        break;
+}</code></pre></div></section>
+<section class="section"><h2>InertialOptimization：尺度初始化到底解什么？</h2><table class="table"><tr><th>顶点</th><th>是否固定</th><th>含义</th></tr><tr><td>VertexPose</td><td>固定</td><td>沿用视觉地图关键帧位姿</td></tr><tr><td>VertexVelocity</td><td>可优化</td><td>每个 KF 的速度</td></tr><tr><td>VertexGyroBias</td><td>可优化</td><td>陀螺偏置</td></tr><tr><td>VertexAccBias</td><td>可优化</td><td>加速度偏置</td></tr><tr><td>VertexGDir</td><td>可优化</td><td>重力方向</td></tr><tr><td>VertexScale</td><td>Mono 时可优化</td><td>视觉地图全局尺度</td></tr></table></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>视觉 PoseOptimization 和 IMU 初始化是两种完全不同的图</h3><p>前者只有当前帧 pose 是变量；后者固定关键帧 pose，优化速度/偏置/重力/尺度。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>Local BA 窗口由共视关系构造</h3><p>而 LocalInertialBA 优先沿时间链构造，这对应视觉/惯性约束的不同拓扑。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>优化函数的“谁固定谁自由”就是理解目标的捷径</h3><p>先看 vertex setFixed，再看 edge 连接，比先钻雅可比公式更适合源码入门。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>鲁棒核和外点策略属于 Tracking/Optimizer 联合机制</h3><p>PoseOptimization 建 robust edge；Tracking 返回后再根据 mvbOutlier 清理关联。</p></div></div></section>
+</main>
+<div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code>，官方 <code>master</code>，commit <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。页面中“源码直接可见”仅陈述代码本身；“由源码行为推导”用于解释代码设计含义，并明确与直接事实区分。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>

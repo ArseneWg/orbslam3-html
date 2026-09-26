@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ORB-SLAM3 单目 + IMU 学习站</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="active">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>ORB-SLAM3 单目 + IMU 学习站</h1>
+        <p>用“源码调用链 + 图文解释 + 3D 小演示”的方式，把 ORB-SLAM3 的单目惯性模式拆成可循序渐进阅读的网页。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="overview"></div>
+      </div>
+    </section>
+    
+  <section class="container" style="padding-top:0;padding-bottom:0"><div class="card" style="border-color:rgba(140,255,183,.3)"><div class="grid two"><div><div class="badge">第二阶段已加入</div><h2 style="margin:12px 0 6px">进入源码精读模式</h2><p class="muted">按真实函数、阈值、成员变量、线程与优化图继续往下读。</p></div><div style="display:flex;align-items:center;justify-content:flex-end"><a class="btn primary" href="source_index.html">打开 Stage 2 源码精读 →</a></div></div></div></section>
+<main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>你能从这个站里学到什么？</h2>
+      <p>这是一套面向 <strong>ORB-SLAM3 单目 + IMU</strong> 的源码学习网站。它把官方工程拆解为一条完整的调用链：<span class="highlight">数据集入口 → System 构建 → Tracking → 单目初始化 → IMU 预积分/初始化 → Local Mapping → Loop Closing → Optimizer</span>。每个节点单独成页，尽量用图、流程图、交互式 3D 小演示解释“这一段代码在系统中扮演什么角色”。</p>
+      <div class="kpis">
+        <div class="kpi"><div class="n">10</div><div class="t">核心页面</div></div>
+        <div class="kpi"><div class="n">1</div><div class="t">聚焦传感器模式：Mono + IMU</div></div>
+        <div class="kpi"><div class="n">3</div><div class="t">主线程群：Tracking / LocalMapping / LoopClosing</div></div>
+        <div class="kpi"><div class="n">7+</div><div class="t">关键类：Frame / KeyFrame / MapPoint ...</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>阅读建议</h2>
+      <div class="timeline">
+        <div class="item"><strong>第 1 遍：</strong>先看「框架总览」和「数据入口」，建立整体地图。</div>
+        <div class="item"><strong>第 2 遍：</strong>顺着 System → Tracking → LocalMapping 读主干。</div>
+        <div class="item"><strong>第 3 遍：</strong>专门看「单目初始化」和「IMU 预积分」，理解视觉与惯性的连接点。</div>
+        <div class="item"><strong>第 4 遍：</strong>再看 Loop Closing、Optimizer、数据结构，形成闭环。</div>
+      </div>
+      <div class="note success" style="margin-top:14px">
+        <strong>方法论：</strong>源码学习时不要试图一次性“啃完所有公式”。先盯住 <code>函数入口</code>、<code>线程边界</code>、<code>对象生命周期</code> 和 <code>数据从哪里来，往哪里去</code>。
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>单目 + IMU 完整流程图</h2>
+  <div class="card">
+    <div class="flow">
+      <a class="node" href="entry.html"><strong>1. 数据入口</strong><small>例子程序读取图像与 IMU，按图像帧切片收集 IMU 样本，然后调用 <code>TrackMonocular()</code>。</small></a>
+      <a class="node" href="system.html"><strong>2. System 启动</strong><small>加载词袋、设置、Atlas、关键帧数据库，拉起 Tracking / LocalMapping / LoopClosing / Viewer。</small></a>
+      <a class="node" href="tracking.html"><strong>3. Tracking</strong><small>灰度化、提特征、建 Frame、执行主状态机，并决定是否创建新关键帧。</small></a>
+      <a class="node" href="init.html"><strong>4. 单目初始化</strong><small>两视图匹配、恢复相对位姿、三角化，生成第一张地图；此时尺度仍可能模糊。</small></a>
+      <a class="node" href="imu.html"><strong>5. IMU 融合</strong><small>在帧间进行预积分，随后通过惯性初始化估计重力/尺度/偏置，将视觉地图升级为视觉惯性地图。</small></a>
+    </div>
+    <div class="flow" style="margin-top:12px">
+      <a class="node" href="local_mapping.html"><strong>6. Local Mapping</strong><small>处理新关键帧、剔除坏点、三角化新点、局部优化、关键帧裁剪。</small></a>
+      <a class="node" href="loop_closing.html"><strong>7. Loop Closing</strong><small>利用 BoW 与几何验证查找回环/合图候选，做图校正和地图融合。</small></a>
+      <a class="node" href="optimizer.html"><strong>8. Optimizer</strong><small>Pose Optimization、Local BA、Inertial BA、位姿图优化等在此落地。</small></a>
+      <a class="node" href="data_structures.html"><strong>9. 数据结构</strong><small>Frame、KeyFrame、MapPoint、Map、Atlas 等共同支撑前后端。</small></a>
+      <a class="node" href="overview.html"><strong>10. 回看总览</strong><small>把线程、对象、函数调用关系拼回一张全局认知图。</small></a>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid three">
+    <div class="card"><h3>前端看什么</h3><p>以 <code>Tracking</code> 为中心，理解相机位姿如何被预测、匹配、优化和更新。</p></div>
+    <div class="card"><h3>后端看什么</h3><p>以 <code>LocalMapping</code> 和 <code>LoopClosing</code> 为中心，理解地图如何被持续优化并修正漂移。</p></div>
+    <div class="card"><h3>视觉惯性看什么</h3><p>重点盯住 <code>PreintegrateIMU</code> 与 <code>InitializeIMU</code>：它们是从“只有相对视觉几何”走向“有尺度与重力约束”的关键。</p></div>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码范围说明</h2>
+  <div class="grid two">
+    <div class="card">
+      <h3>本网站主要参考的目录</h3>
+      <ul class="simple-list source-list">
+        <li><code>Examples/Monocular-Inertial/</code>：单目 + IMU 的例子程序与数据入口。</li>
+        <li><code>include/System.h</code>、<code>src/System.cc</code>：系统总入口与线程装配。</li>
+        <li><code>include/Tracking.h</code>、<code>src/Tracking.cc</code>：前端状态机与位姿跟踪。</li>
+        <li><code>src/LocalMapping.cc</code>：局部建图与 IMU 初始化。</li>
+        <li><code>src/LoopClosing.cc</code>：闭环与合图。</li>
+        <li><code>src/Optimizer.cc</code>：视觉/惯性优化实现。</li>
+        <li><code>src/Frame.cc</code>、<code>src/KeyFrame.cc</code>、<code>src/MapPoint.cc</code>：核心对象语义。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>不是本网站重点的内容</h3>
+      <ul class="simple-list">
+        <li>编译环境避坑、Ubuntu 依赖安装。</li>
+        <li>ROS 节点工程封装。</li>
+        <li>立体、RGB-D、鱼眼等其它传感器模式的差异化细节。</li>
+        <li>逐公式推导完整论文；本网站以“源码工作流”视角讲解，不以数学推导为主线。</li>
+      </ul>
+      <div class="note small">如果你后面还要，我也可以继续在这套站点基础上补一版「部署与调试」专栏。</div>
+    </div>
+  </div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

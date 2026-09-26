@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IMU 预积分与惯性初始化：从无尺度到有物理意义</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="active">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>IMU 预积分与惯性初始化：从无尺度到有物理意义</h1>
+        <p>单目 + IMU 的精髓就在这里：IMU 不只是“加一点先验”，而是在关键时刻为地图提供尺度、重力和动态一致性。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="imu"></div>
+      </div>
+    </section>
+    
+  <main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>IMU 在 Mono + IMU 模式中的两层作用</h2>
+      <ol class="simple-list">
+        <li><strong>短时间作用：</strong>在相邻图像之间做预积分，为当前帧提供更好的运动预测初值。</li>
+        <li><strong>长期作用：</strong>在一段关键帧窗口上估计重力方向、尺度、速度、偏置，让系统从“纯视觉几何地图”提升为“视觉惯性地图”。</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>入口函数</h2>
+      <ul class="simple-list">
+        <li><code>Tracking::GrabImuData()</code>：缓存新到达的 IMU 样本。</li>
+        <li><code>Tracking::PreintegrateIMU()</code>：在上一帧与当前帧之间对 IMU 做预积分。</li>
+        <li><code>LocalMapping::InitializeIMU()</code>：在有足够关键帧与运动激励时执行惯性初始化。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>你可以这样理解“预积分”</h2>
+  <div class="card">
+    <p>IMU 的角速度和加速度采样频率很高，如果每来一条就立刻做一次完整优化，系统会非常沉重。预积分的思想是：<strong>把上一帧到当前帧之间那一串 IMU 采样压缩成一个紧凑的“相对运动约束”</strong>，供前端预测和后端优化共同使用。</p>
+    <div class="callstack">
+      <ol>
+        <li>缓存好帧间 IMU 样本。</li>
+        <li>在进入当前图像跟踪前，调用 <code>PreintegrateIMU()</code> 积分这些样本。</li>
+        <li>得到面向相邻帧/关键帧的旋转、速度、位置相对约束（以及对偏置的敏感性）。</li>
+        <li>这些量被送入跟踪预测与惯性 BA 约束中。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h3>为什么单目系统还需要 IMU 初始化？</h3>
+      <p>因为单目视觉即使初始化成功，本质上仍可能处在“相似变换”尺度空间里：地图可以整体放大/缩小而不改变重投影误差。IMU 带来了与真实物理量相关的加速度和角速度信息，因此只要运动激励足够，就能帮助估计：</p>
+      <ul class="simple-list">
+        <li>重力方向</li>
+        <li>全局尺度</li>
+        <li>各关键帧速度</li>
+        <li>陀螺仪/加速度计偏置</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>源码层面的关键观察</h3>
+      <ul class="simple-list">
+        <li>IMU 初始化主要不在例子程序中完成，而是在 <code>LocalMapping</code> 里以地图窗口的视角完成。</li>
+        <li>这说明它不是“当前帧小修小补”，而是“在一段关键帧上联合估计”的后端行为。</li>
+        <li>从系统设计上，视觉先把地图建起来，惯性再把尺度与重力“钉住”。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>IMU 信息流</h2>
+  <div class="card">
+    <figure class="figure">
+      <svg viewBox="0 0 980 260" width="100%" height="100%">
+        <defs><marker id="arr3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#67d5ff"/></marker></defs>
+        <rect x="40" y="85" width="140" height="72" rx="16" fill="#15203c" stroke="#ffd166"/>
+        <text x="110" y="123" text-anchor="middle" fill="#e8eefc" font-size="19">IMU 样本队列</text>
+        <rect x="230" y="85" width="180" height="72" rx="16" fill="#15203c" stroke="#67d5ff"/>
+        <text x="320" y="114" text-anchor="middle" fill="#e8eefc" font-size="19">PreintegrateIMU</text>
+        <text x="320" y="137" text-anchor="middle" fill="#9eb0d8" font-size="13">帧间压缩为相对运动约束</text>
+        <rect x="465" y="45" width="190" height="72" rx="16" fill="#15203c" stroke="#8cffb7"/>
+        <text x="560" y="82" text-anchor="middle" fill="#e8eefc" font-size="19">Tracking 预测</text>
+        <rect x="465" y="145" width="190" height="72" rx="16" fill="#15203c" stroke="#8cffb7"/>
+        <text x="560" y="182" text-anchor="middle" fill="#e8eefc" font-size="19">Inertial BA 约束</text>
+        <rect x="730" y="85" width="210" height="72" rx="16" fill="#15203c" stroke="#f49ac2"/>
+        <text x="835" y="114" text-anchor="middle" fill="#e8eefc" font-size="19">InitializeIMU</text>
+        <text x="835" y="137" text-anchor="middle" fill="#9eb0d8" font-size="13">估计尺度 / 重力 / 偏置 / 速度</text>
+        <line x1="180" y1="121" x2="230" y2="121" stroke="#67d5ff" stroke-width="3" marker-end="url(#arr3)"/>
+        <line x1="410" y1="121" x2="465" y2="81" stroke="#67d5ff" stroke-width="3" marker-end="url(#arr3)"/>
+        <line x1="410" y1="121" x2="465" y2="181" stroke="#67d5ff" stroke-width="3" marker-end="url(#arr3)"/>
+        <line x1="655" y1="121" x2="730" y2="121" stroke="#67d5ff" stroke-width="3" marker-end="url(#arr3)"/>
+      </svg>
+      <figcaption>IMU 的数据流不是“一根线”，而是同时服务于前端预测和后端联合优化。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码锚点</h2>
+  <div class="card"><ul class="simple-list source-list">
+    <li><code>src/System.cc</code>：把 <code>vector&lt;IMU::Point&gt;</code> 逐个交给 <code>GrabImuData()</code>。</li>
+    <li><code>include/Tracking.h</code> / <code>src/Tracking.cc</code>：<code>GrabImuData()</code>、<code>PreintegrateIMU()</code>、Track 中的视觉惯性分支。</li>
+    <li><code>src/LocalMapping.cc</code>：<code>InitializeIMU()</code> 与惯性初始化相关逻辑。</li>
+    <li><code>src/ImuTypes.cc</code>：IMU 相关类型与积分辅助实现。</li>
+    <li><code>src/Optimizer.cc</code>：惯性优化相关函数族。</li>
+  </ul></div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

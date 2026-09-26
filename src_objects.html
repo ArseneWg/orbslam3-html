@@ -1,0 +1,36 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>对象与图结构精读：为什么地图能“连起来”</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body><header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="">入口精读</a><a href="src_system.html" class="">System 精读</a><a href="src_orb.html" class="">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="">初始化精读</a><a href="src_imu.html" class="">IMU 精读</a><a href="src_local_mapping.html" class="">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="">Optimizer 精读</a><a href="src_objects.html" class="active">对象与图结构</a></nav></div></header><section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>对象与图结构精读：为什么地图能“连起来”</h1><p>Frame、KeyFrame、MapPoint、Map、Atlas 不是命名包装；它们的观测关系和连接规则直接决定后端优化与闭环图结构。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="structures"></div></div></section><main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>Frame → KeyFrame → MapPoint</h2><p>源码把“当前观测”和“长期地图”分开管理：Frame 是短生命周期当前状态；KeyFrame 进入图结构；MapPoint 保存 3D 位置和多关键帧观测。</p></div><div class="card"><h2>Atlas → Map</h2><p>Atlas 管理多个 Map。Tracking 彻底 LOST 且地图足够大时会 <code>CreateMapInAtlas()</code>，最终调用 <code>Atlas::CreateNewMap()</code>，旧 map 被置 stored，新 map 成为 current。</p></div></div></section>
+<section class="section"><h2>BoW 是如何挂到 Frame 上的？</h2><div class="source-card"><div class="source-head"><strong>Frame::ComputeBoW</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Frame.cc#L738-L746">src/Frame.cc:738-746</a></div><pre class="codeblock"><code>void Frame::ComputeBoW()
+{
+    if(mBowVec.empty())
+    {
+        vector&lt;cv::Mat&gt; vCurrentDesc = Converter::toDescriptorVector(mDescriptors);
+        mpORBvocabulary-&gt;transform(vCurrentDesc,mBowVec,mFeatVec,4);
+    }
+}</code></pre></div></section>
+<section class="section"><h2>KeyFrame 共视图不是凭空间距离建的</h2><div class="source-card"><div class="source-head"><strong>UpdateConnections：共享 MapPoint 数决定连接权重</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/KeyFrame.cc#L379-L445">src/KeyFrame.cc:379-445</a></div><pre class="codeblock"><code>for(MapPoint* pMP : vpMP)
+{
+    if(!pMP || pMP-&gt;isBad()) continue;
+    auto observations = pMP-&gt;GetObservations();
+    for(auto &amp;obs : observations)
+    {
+        if(obs.first-&gt;mnId==mnId || obs.first-&gt;isBad() || obs.first-&gt;GetMap()!=mpMap)
+            continue;
+        KFcounter[obs.first]++;
+    }
+}
+...
+int th = 15;
+if(mit-&gt;second&gt;=th)
+    AddConnection(...);</code></pre></div></section>
+<section class="section"><h2>MapPoint 为什么不是一个 Vector3f 就完了？</h2><div class="grid two"><div class="card"><h3>Observation</h3><p><code>AddObservation</code> 记录该 MapPoint 在哪个 KeyFrame 的哪个特征索引上被看到，并维护 <code>nObs</code>。观测过少时点会被标坏。</p><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/MapPoint.cc#L141-L205">src/MapPoint.cc:141-205</a></div><div class="card"><h3>Distinctive Descriptor</h3><p>MapPoint 收集所有有效观测描述子，计算两两 Hamming 距离，最终选择“到其它描述子的中位距离最小”的那个描述子作为代表。</p><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/MapPoint.cc#L329-L404">src/MapPoint.cc:329-404</a></div></div></section>
+<section class="section"><h2>Atlas::CreateNewMap 的真实动作</h2><div class="source-card"><div class="source-head"><strong>旧 Map 存档，新 Map 接管 active 状态</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Atlas.cc#L58-L78">src/Atlas.cc:58-78</a></div><pre class="codeblock"><code>if(mpCurrentMap)
+{
+    ...
+    mpCurrentMap-&gt;SetStoredMap();
+}
+mpCurrentMap = new Map(mnLastInitKFidMap);
+mpCurrentMap-&gt;SetCurrentMap();
+mspMaps.insert(mpCurrentMap);</code></pre></div></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>共视关系来自“共享地图点计数”</h3><p>UpdateConnections 对每个 MapPoint 的观测 KeyFrame 做计数，默认共享点数达到 15 才加连接；若一个都没达到则保留最大者。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>MapPoint 的 descriptor 是多观测投票出的代表</h3><p>不是简单使用第一次观测的 descriptor。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>Atlas 使 LOST 后“另起新图”成为系统原生能力</h3><p>代码不是把旧 Map 清空，而是 SetStoredMap 后创建新的 current Map。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>这解释了 ORB-SLAM3 为什么天然适合多地图/地图合并</h3><p>LoopClosing 的 merge 分支正是建立在 Atlas 能同时保存多张 Map 的前提上。</p></div></div></section>
+</main><div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code> master @ <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。</div><script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>

@@ -1,0 +1,36 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LocalMapping 精读：新关键帧如何被后端消化</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="">入口精读</a><a href="src_system.html" class="">System 精读</a><a href="src_orb.html" class="">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="">初始化精读</a><a href="src_imu.html" class="">IMU 精读</a><a href="src_local_mapping.html" class="active">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="">Optimizer 精读</a><a href="src_objects.html" class="">对象与图结构</a></nav></div></header>
+<section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>LocalMapping 精读：新关键帧如何被后端消化</h1><p>从 Run() 主循环看清：建点、融合、BA、IMU 初始化、关键帧裁剪和向 LoopClosing 传递的准确顺序。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="localmap"></div></div></section>
+<main class="container">
+<section class="section"><h2>Run() 主循环的真实顺序</h2><div class="card"><div class="source-chain"><span class="box">ProcessNewKeyFrame</span><span class="call-arrow">→</span><span class="box">MapPointCulling</span><span class="call-arrow">→</span><span class="box">CreateNewMapPoints</span><span class="call-arrow">→</span><span class="box">SearchInNeighbors</span><span class="call-arrow">→</span><span class="box">Local BA / LocalInertialBA</span><span class="call-arrow">→</span><span class="box">InitializeIMU?</span><span class="call-arrow">→</span><span class="box">KeyFrameCulling</span><span class="call-arrow">→</span><span class="box">LoopCloser::InsertKeyFrame</span></div></div></section>
+<section class="section"><h2>源码主干</h2><div class="source-card"><div class="source-head"><strong>LocalMapping::Run 的骨架</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LocalMapping.cc#L64-L225">src/LocalMapping.cc:64-225</a></div><pre class="codeblock"><code>if(CheckNewKeyFrames() &amp;&amp; !mbBadImu)
+{
+    ProcessNewKeyFrame();
+    MapPointCulling();
+    CreateNewMapPoints();
+    mbAbortBA = false;
+
+    if(!CheckNewKeyFrames())
+        SearchInNeighbors();
+
+    if(!CheckNewKeyFrames() &amp;&amp; !stopRequested())
+    {
+        if(mpAtlas-&gt;KeyFramesInMap()&gt;2)
+        {
+            if(mbInertial &amp;&amp; mpCurrentKeyFrame-&gt;GetMap()-&gt;isImuInitialized())
+                Optimizer::LocalInertialBA(...);
+            else
+                Optimizer::LocalBundleAdjustment(...);
+        }
+        if(!mpCurrentKeyFrame-&gt;GetMap()-&gt;isImuInitialized() &amp;&amp; mbInertial)
+            InitializeIMU(...);
+        KeyFrameCulling();
+    }
+    mpLoopCloser-&gt;InsertKeyFrame(mpCurrentKeyFrame);
+}</code></pre></div></section>
+<section class="section"><div class="grid two"><div class="card"><h2>什么时候从视觉 LBA 切到惯性 LBA？</h2><p>条件非常直接：<code>mbInertial && map->isImuInitialized()</code>。IMU 尚未初始化时，即使传感器模式带 IMU，这里仍会走普通 <code>LocalBundleAdjustment</code>。</p><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>“带 IMU”不等于“马上跑惯性 BA”</h3><p>必须等 Map 的 isImuInitialized() 变为 true。</p></div></div><div class="card"><h2>运动激励不足会怎样？</h2><p>在惯性地图且尚未完成 InertialBA2 时，源码用最近几帧的位移累计判断运动。如果 <code>mTinit&lt;10s</code> 且 <code>dist&lt;0.02</code>，会设置 <code>mbBadImu=true</code> 并请求重置地图。</p><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/LocalMapping.cc#L118-L160">src/LocalMapping.cc:118-160</a></div></div></section>
+<section class="section"><h2>视觉惯性初始化不是一次，而是分阶段</h2><table class="table threshold-table"><tr><th>阶段</th><th>触发时间</th><th>调用</th></tr><tr><td>首次 InitializeIMU</td><td>地图未 IMU 初始化</td><td>Mono: <code>InitializeIMU(1e2,1e10,true)</code></td></tr><tr><td>VIBA 1</td><td><code>mTinit &gt; 5s</code></td><td><code>InitializeIMU(1,1e5,true)</code></td></tr><tr><td>VIBA 2</td><td><code>mTinit &gt; 15s</code></td><td><code>InitializeIMU(0,0,true)</code></td></tr><tr><td>ScaleRefinement</td><td>约 25/35/45/55/65/75s 的窄窗口</td><td>仅 monocular 调用</td></tr></table></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>LocalMapping 会主动影响 Tracking</h3><p>AcceptKeyFrames / stopRequested / InterruptBA 等状态决定 Tracking 能否插关键帧。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>新的关键帧最终被传给 LoopClosing</h3><p>每轮成功处理后直接 <code>mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame)</code>。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>后端繁忙时会跳过部分重工作</h3><p>多处 <code>CheckNewKeyFrames()</code> 防止新 KF 堆积时仍执着做 SearchInNeighbors 或 BA。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>这体现实时优先级</h3><p>源码在“地图精修”和“及时消费新关键帧”之间反复检查队列，明显是实时系统权衡。</p></div></div></section>
+</main>
+<div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code>，官方 <code>master</code>，commit <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。页面中“源码直接可见”仅陈述代码本身；“由源码行为推导”用于解释代码设计含义，并明确与直接事实区分。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>

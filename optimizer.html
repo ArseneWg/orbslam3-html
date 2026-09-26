@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Optimizer：视觉与惯性约束最终如何被优化</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="active">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>Optimizer：视觉与惯性约束最终如何被优化</h1>
+        <p>把各类“观测”变成真正可用的位姿与地图，需要后端优化不断出手。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="optimizer"></div>
+      </div>
+    </section>
+    
+  <main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>Optimizer 不是一个流程节点，而是一组公共能力</h2>
+      <p><code>src/Optimizer.cc</code> 里集中放着各种优化例程，供 Tracking、LocalMapping、LoopClosing 在不同场景下调用。它像一个“后端工具箱”。</p>
+      <ul class="simple-list">
+        <li>Pose Optimization：给定地图点观测，优化当前帧位姿。</li>
+        <li>Local Bundle Adjustment：在局部窗口联合优化关键帧位姿与地图点。</li>
+        <li>视觉惯性 BA：在 BA 中再加入 IMU 约束。</li>
+        <li>图优化 / 闭环校正：在更大尺度上拉直图结构。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>为什么要有这么多优化层次？</h2>
+      <table class="table">
+        <tr><th>层次</th><th>目标</th><th>典型调用方</th></tr>
+        <tr><td>Pose-only</td><td>尽快稳住当前帧位姿</td><td>Tracking</td></tr>
+        <tr><td>Local BA</td><td>精修局部关键帧与地图点</td><td>LocalMapping</td></tr>
+        <tr><td>Inertial BA</td><td>把 IMU 约束引入联合优化</td><td>LocalMapping / VI 相关流程</td></tr>
+        <tr><td>Pose Graph / 全局修正</td><td>闭环后矫正全局漂移</td><td>LoopClosing</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>优化图在概念上长什么样？</h2>
+  <div class="card">
+    <figure class="figure">
+      <svg viewBox="0 0 980 300" width="100%" height="100%">
+        <circle cx="140" cy="160" r="24" fill="#67d5ff"/><circle cx="260" cy="110" r="24" fill="#67d5ff"/><circle cx="410" cy="185" r="24" fill="#67d5ff"/><circle cx="560" cy="108" r="24" fill="#67d5ff"/><circle cx="730" cy="166" r="24" fill="#67d5ff"/>
+        <circle cx="230" cy="225" r="12" fill="#8cffb7"/><circle cx="340" cy="55" r="12" fill="#8cffb7"/><circle cx="475" cy="250" r="12" fill="#8cffb7"/><circle cx="640" cy="232" r="12" fill="#8cffb7"/><circle cx="650" cy="50" r="12" fill="#8cffb7"/>
+        <line x1="140" y1="160" x2="260" y2="110" stroke="#67d5ff" stroke-width="3"/><line x1="260" y1="110" x2="410" y2="185" stroke="#67d5ff" stroke-width="3"/><line x1="410" y1="185" x2="560" y2="108" stroke="#67d5ff" stroke-width="3"/><line x1="560" y1="108" x2="730" y2="166" stroke="#67d5ff" stroke-width="3"/>
+        <line x1="140" y1="160" x2="230" y2="225" stroke="#8cffb7" stroke-width="2"/><line x1="260" y1="110" x2="230" y2="225" stroke="#8cffb7" stroke-width="2"/><line x1="260" y1="110" x2="340" y2="55" stroke="#8cffb7" stroke-width="2"/><line x1="410" y1="185" x2="475" y2="250" stroke="#8cffb7" stroke-width="2"/><line x1="560" y1="108" x2="650" y2="50" stroke="#8cffb7" stroke-width="2"/><line x1="730" y1="166" x2="640" y2="232" stroke="#8cffb7" stroke-width="2"/>
+        <path d="M260 110 C380 20, 600 20, 730 166" fill="none" stroke="#f49ac2" stroke-width="3" stroke-dasharray="8 8"/>
+        <text x="500" y="286" text-anchor="middle" fill="#d8e5ff" font-size="16">蓝色节点：关键帧/位姿；绿色节点：地图点；蓝线：常规图关系；粉虚线：闭环等全局约束</text>
+      </svg>
+      <figcaption>无论你做的是位姿优化、局部 BA 还是闭环图优化，本质上都在“调整图中的变量，让误差最小”。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h3>读 Optimizer 时最重要的思维</h3>
+      <ul class="simple-list">
+        <li>这不是一个孤立线程，而是被不同模块调用的公共后端。</li>
+        <li>不要一上来陷进 g2o 细节；先看“谁调用了它、传了什么变量、为什么此时需要这种优化”。</li>
+        <li>分清楚变量类型：当前帧位姿、关键帧位姿、地图点、速度、偏置……不同函数关心的变量不同。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>视觉惯性优化的额外意义</h3>
+      <p>当 IMU 约束加入后，优化目标不再只是“让像素重投影误差小”，还要让相邻帧/关键帧的运动与 IMU 观测一致。这使得系统不仅更稳，还能把尺度与动力学状态纳入估计。</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码锚点</h2>
+  <div class="card"><ul class="simple-list source-list">
+    <li><code>src/Optimizer.cc</code>：<code>PoseOptimization()</code>、<code>LocalBundleAdjustment()</code>、惯性 BA 相关实现、闭环/图优化相关实现。</li>
+    <li><code>src/G2oTypes.cc</code>、<code>include/OptimizableTypes.h</code>：g2o 图优化中用到的自定义顶点/边类型。</li>
+  </ul></div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

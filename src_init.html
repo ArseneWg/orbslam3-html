@@ -1,0 +1,54 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>单目初始化精读：从 2D 匹配到第一张 Map</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="">入口精读</a><a href="src_system.html" class="">System 精读</a><a href="src_orb.html" class="">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="active">初始化精读</a><a href="src_imu.html" class="">IMU 精读</a><a href="src_local_mapping.html" class="">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="">Optimizer 精读</a><a href="src_objects.html" class="">对象与图结构</a></nav></div></header>
+<section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>单目初始化精读：从 2D 匹配到第一张 Map</h1><p>源码把“初始化”写成一组非常明确的门槛、两视图重建和对象创建动作。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="init"></div></div></section>
+<main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>源码中的初始化门槛</h2><table class="table threshold-table"><tr><td>候选初始帧特征数</td><td>&gt;100</td></tr><tr><td>第二帧若特征数</td><td>≤100 → 取消准备状态</td></tr><tr><td>IMU_MONOCULAR 两帧间隔</td><td>&gt;1.0s → 取消准备状态</td></tr><tr><td>SearchForInitialization 匹配数</td><td>&lt;100 → 失败</td></tr><tr><td>初始地图当前 KF 有效点</td><td>&lt;50 → ResetActiveMap</td></tr></table></div><div class="card"><h2>调用链</h2><div class="mini-call">MonocularInitialization()</div><div class="mini-call">ORBmatcher::SearchForInitialization()</div><div class="mini-call">Camera::ReconstructWithTwoViews()</div><div class="mini-call">CreateInitialMapMonocular()</div><div class="mini-call">Optimizer::GlobalBundleAdjustemnt(..., 20)</div></div></div></section>
+<section class="section"><h2>第 1 阶段：选择初始参考帧</h2><div class="source-card"><div class="source-head"><strong>先找到一张“特征够多”的起始帧</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2451-L2479">src/Tracking.cc:2451-2479</a></div><pre class="codeblock"><code>if(!mbReadyToInitializate)
+{
+    if(mCurrentFrame.mvKeys.size()&gt;100)
+    {
+        mInitialFrame = Frame(mCurrentFrame);
+        mLastFrame = Frame(mCurrentFrame);
+        ...
+        if (mSensor == System::IMU_MONOCULAR)
+        {
+            mpImuPreintegratedFromLastKF =
+                new IMU::Preintegrated(IMU::Bias(),*mpImuCalib);
+            mCurrentFrame.mpImuPreintegrated = mpImuPreintegratedFromLastKF;
+        }
+        mbReadyToInitializate = true;
+        return;
+    }
+}</code></pre></div></section>
+<section class="section"><h2>第 2 阶段：匹配与两视图重建</h2><div class="source-card"><div class="source-head"><strong>匹配足够后才进入两视图几何</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2490-L2521">src/Tracking.cc:2490-2521</a></div><pre class="codeblock"><code>ORBmatcher matcher(0.9,true);
+int nmatches = matcher.SearchForInitialization(
+    mInitialFrame,mCurrentFrame,mvbPrevMatched,mvIniMatches,100);
+
+if(nmatches&lt;100)
+{
+    mbReadyToInitializate = false;
+    return;
+}
+
+if(mpCamera-&gt;ReconstructWithTwoViews(
+      mInitialFrame.mvKeysUn,mCurrentFrame.mvKeysUn,
+      mvIniMatches,Tcw,mvIniP3D,vbTriangulated))
+{
+    mInitialFrame.SetPose(Sophus::SE3f());
+    mCurrentFrame.SetPose(Tcw);
+    CreateInitialMapMonocular();
+}</code></pre></div></section>
+<section class="section"><h2>第 3 阶段：两关键帧 + MapPoint + 初始 GBA</h2><div class="source-card"><div class="source-head"><strong>初始地图的对象关系与优化</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L2526-L2581">src/Tracking.cc:2526-2581</a></div><pre class="codeblock"><code>KeyFrame* pKFini = new KeyFrame(mInitialFrame,...);
+KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,...);
+...
+MapPoint* pMP = new MapPoint(worldPos,pKFcur,mpAtlas-&gt;GetCurrentMap());
+pKFini-&gt;AddMapPoint(pMP,i);
+pKFcur-&gt;AddMapPoint(pMP,mvIniMatches[i]);
+pMP-&gt;AddObservation(pKFini,i);
+pMP-&gt;AddObservation(pKFcur,mvIniMatches[i]);
+...
+Optimizer::GlobalBundleAdjustemnt(mpAtlas-&gt;GetCurrentMap(),20);</code></pre></div></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>IMU_MONOCULAR 的初始视觉尺度被人为归一化</h3><p>源码用 <code>invMedianDepth = 4.0f / medianDepth</code> 缩放第二关键帧基线和全部初始 MapPoint。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>这不是最终物理尺度</h3><p>后续 InitializeIMU 会显式优化 scale，并对整张 Map 调用 ApplyScaledRotation。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>初始两关键帧被写入时间链</h3><p>IMU_MONOCULAR 下设置 <code>pKFcur->mPrevKF=pKFini</code> 与 <code>pKFini->mNextKF=pKFcur</code>。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>初始化完成后两帧直接插入 LocalMapping</h3><p><code>mpLocalMapper->InsertKeyFrame(pKFini/pKFcur)</code>，说明后端会继续接管它们。</p></div></div></section>
+</main>
+<div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code>，官方 <code>master</code>，commit <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。页面中“源码直接可见”仅陈述代码本身；“由源码行为推导”用于解释代码设计含义，并明确与直接事实区分。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>

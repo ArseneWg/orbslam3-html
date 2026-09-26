@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Loop Closing：如何认出“我回来了”并校正全局漂移</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="active">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>Loop Closing：如何认出“我回来了”并校正全局漂移</h1>
+        <p>闭环不是锦上添花，它是长期运行 SLAM 抑制漂移、重建全局一致地图的关键。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="loop"></div>
+      </div>
+    </section>
+    
+  <main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>Loop Closing 在解决什么问题？</h2>
+      <p>只靠局部跟踪与局部优化，轨迹会随着时间积累漂移。Loop Closing 要解决的是：<strong>当系统再次回到曾经来过的地方时，能否认出来，并把整个图重新拉直</strong>。</p>
+      <div class="note">在 ORB-SLAM3 里，这个线程除了“经典回环”，还承担 Atlas 语义下的 <strong>地图合并（map merging）</strong> 任务，所以它比很多早期 SLAM 系统更强。</div>
+    </div>
+    <div class="card">
+      <h2>它通常怎么做？</h2>
+      <ol class="simple-list">
+        <li>从新关键帧中计算 BoW / 查询 KeyFrameDatabase。</li>
+        <li>找到外观上相似的候选关键帧或候选地图区域。</li>
+        <li>再通过几何验证排除假阳性。</li>
+        <li>若确认闭环或可合图，就估计对齐关系（常见是 Sim3/位姿图校正）。</li>
+        <li>修正关键帧与地图点，触发更大范围优化。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>为什么要先 BoW，再几何验证？</h2>
+  <div class="card">
+    <p>因为全局地图可能很大，不能对每个历史关键帧都做重几何匹配。BoW（Bag of Words）提供了一种很快的“外观索引”：先从词袋数据库里拿到一小批长得像的候选，再用几何关系确认是不是同一地点。</p>
+    <div class="grid two" style="margin-top:14px">
+      <div class="card" style="background:rgba(255,255,255,.03)">
+        <h3>BoW 候选检索</h3>
+        <p>快、全局范围广，但会有外观混淆。</p>
+      </div>
+      <div class="card" style="background:rgba(255,255,255,.03)">
+        <h3>几何验证</h3>
+        <p>慢一些，但能利用匹配与几何一致性过滤假回环。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h3>回环修正之后会发生什么？</h3>
+      <ul class="simple-list">
+        <li>关键帧位姿被整体校正。</li>
+        <li>重复的地图点会被融合。</li>
+        <li>局部地图与历史地图之间的图结构被重新拉紧。</li>
+        <li>必要时触发更大范围的图优化或 BA。</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Atlas 视角下的“合图”</h3>
+      <p>ORB-SLAM3 支持多地图（Atlas）。当系统曾经丢失又重新建了地图，或者在不同子图间存在重叠区域时，LoopClosing 线程还可能执行地图合并。对读码者来说，这意味着你不能只把它当作“单纯回环修正”，还要看到它与 Atlas/Map 的交互。</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码锚点</h2>
+  <div class="card"><ul class="simple-list source-list">
+    <li><code>src/LoopClosing.cc</code>：线程主循环、回环候选检测、地图合并、图校正等实现。</li>
+    <li><code>src/KeyFrameDatabase.cc</code>：基于词袋的关键帧检索逻辑。</li>
+    <li><code>src/Sim3Solver.cc</code>：回环/对齐相关几何求解器。</li>
+    <li><code>src/Atlas.cc</code>、<code>src/Map.cc</code>：多地图与地图切换/合并语义。</li>
+  </ul></div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

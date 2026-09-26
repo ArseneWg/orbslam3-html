@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>单目初始化：第一张地图是如何被建出来的</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="active">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>单目初始化：第一张地图是如何被建出来的</h1>
+        <p>单目 SLAM 不能凭空知道深度，所以第一张地图必须从两视图几何里“长出来”。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="init"></div>
+      </div>
+    </section>
+    
+  <main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>单目初始化为什么特殊？</h2>
+      <p>单目相机只有 2D 像素观测，没有天然深度。所以在第一阶段，系统必须先用<strong>两视图几何</strong>恢复一个相对位姿，并对一部分特征点完成三角化，才有资格进入正常 SLAM。这个阶段通常由 <code>MonocularInitialization()</code> 和 <code>CreateInitialMapMonocular()</code> 主导。</p>
+    </div>
+    <div class="card">
+      <h2>初始化的核心输出</h2>
+      <ul class="simple-list">
+        <li>一对初始关键帧（通常来自两张能形成足够视差的图像）。</li>
+        <li>两帧之间的相对位姿。</li>
+        <li>一批被成功三角化的初始地图点。</li>
+        <li>初始地图图结构（KeyFrame / MapPoint 连接关系）。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>初始化流程</h2>
+  <div class="card">
+    <div class="callstack">
+      <ol>
+        <li>选择候选初始帧，并提取 ORB 特征。</li>
+        <li>在当前帧与初始帧之间做 ORB 匹配（经典入口是 <code>ORBmatcher</code> 的初始化匹配分支）。</li>
+        <li>利用 <code>TwoViewReconstruction</code> 在几何模型中恢复相对位姿并三角化点。</li>
+        <li>把两帧升级为关键帧，创建初始地图点。</li>
+        <li>调用 <code>CreateInitialMapMonocular()</code> 构建第一张地图并触发初始优化。</li>
+      </ol>
+    </div>
+    <div class="note warn">重要：<strong>这一步并不意味着 Mono + IMU 已经完全“有尺度”</strong>。单目视觉初始化产生的是几何一致的初始地图，而真正稳健的重力/尺度/偏置估计通常要在后续惯性初始化中完成。</div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <figure class="figure">
+        <svg viewBox="0 0 820 280" width="100%" height="100%">
+          <rect x="40" y="70" width="110" height="70" rx="16" fill="#15203c" stroke="#67d5ff"/>
+          <text x="95" y="107" text-anchor="middle" fill="#e8eefc" font-size="20">初始帧</text>
+          <rect x="660" y="70" width="110" height="70" rx="16" fill="#15203c" stroke="#67d5ff"/>
+          <text x="715" y="107" text-anchor="middle" fill="#e8eefc" font-size="20">当前帧</text>
+          <circle cx="270" cy="90" r="7" fill="#8cffb7"/><circle cx="380" cy="60" r="7" fill="#8cffb7"/><circle cx="450" cy="145" r="7" fill="#8cffb7"/><circle cx="550" cy="108" r="7" fill="#8cffb7"/>
+          <line x1="150" y1="105" x2="270" y2="90" stroke="#67d5ff" stroke-width="2.5"/>
+          <line x1="150" y1="105" x2="380" y2="60" stroke="#67d5ff" stroke-width="2.5"/>
+          <line x1="150" y1="105" x2="450" y2="145" stroke="#67d5ff" stroke-width="2.5"/>
+          <line x1="150" y1="105" x2="550" y2="108" stroke="#67d5ff" stroke-width="2.5"/>
+          <line x1="660" y1="105" x2="270" y2="90" stroke="#ffd166" stroke-width="2.5"/>
+          <line x1="660" y1="105" x2="380" y2="60" stroke="#ffd166" stroke-width="2.5"/>
+          <line x1="660" y1="105" x2="450" y2="145" stroke="#ffd166" stroke-width="2.5"/>
+          <line x1="660" y1="105" x2="550" y2="108" stroke="#ffd166" stroke-width="2.5"/>
+          <text x="410" y="240" text-anchor="middle" fill="#d8e5ff" font-size="16">两视图匹配 + 位姿恢复 + 三角化 → 产生第一批 MapPoint</text>
+        </svg>
+        <figcaption>单目初始化的本质：先找“同一批 2D 特征在两帧里”的对应关系，再反推出相对相机运动与 3D 点。</figcaption>
+      </figure>
+    </div>
+    <div class="card">
+      <h3>为什么初始化不容易？</h3>
+      <ul class="simple-list">
+        <li>如果视差太小，三角化会很不稳定。</li>
+        <li>如果匹配误差大，错误点会污染初始地图。</li>
+        <li>如果场景近似纯平面或退化几何，模型恢复更困难。</li>
+        <li>单目只恢复到一个相对尺度空间，绝对尺度还悬而未决。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码锚点</h2>
+  <div class="card"><ul class="simple-list source-list">
+    <li><code>src/Tracking.cc</code>：<code>MonocularInitialization()</code>、<code>CreateInitialMapMonocular()</code>。</li>
+    <li><code>include/TwoViewReconstruction.h</code> / <code>src/...</code>：两视图重建模块。</li>
+    <li><code>src/ORBmatcher.cc</code>：初始化匹配相关逻辑。</li>
+  </ul></div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

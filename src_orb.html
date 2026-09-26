@@ -1,0 +1,29 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ORB 精读：特征到底怎样进入 SLAM</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body><header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="">入口精读</a><a href="src_system.html" class="">System 精读</a><a href="src_orb.html" class="active">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="">初始化精读</a><a href="src_imu.html" class="">IMU 精读</a><a href="src_local_mapping.html" class="">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="">Optimizer 精读</a><a href="src_objects.html" class="">对象与图结构</a></nav></div></header><section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>ORB 精读：特征到底怎样进入 SLAM</h1><p>从 ORBextractor 和 ORBmatcher 看清：特征如何产生、如何按词袋匹配、如何用投影几何缩小搜索。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="tracking"></div></div></section><main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>ORBextractor 在 Frame 构造时做什么？</h2><p><code>ORBextractor::operator()</code> 明确按以下顺序执行：构建图像金字塔 → OctTree 均匀分配关键点 → 每层高斯模糊 → 计算 32-byte ORB 描述子 → 将关键点坐标缩放回原图尺度。</p></div><div class="card"><h2>为什么它是流程节点？</h2><p>Tracking 后面的 BoW、投影匹配、初始化匹配、MapPoint 描述子维护，全部依赖这里产生的 <code>KeyPoint + descriptor</code>。因此它不是“图像预处理小工具”，而是几乎所有视觉约束的最底层输入。</p></div></div></section>
+<section class="section"><h2>提取器主干</h2><div class="source-card"><div class="source-head"><strong>ORBextractor::operator()</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/ORBextractor.cc#L1086-L1168">src/ORBextractor.cc:1086-1168</a></div><pre class="codeblock"><code>ComputePyramid(image);
+
+vector&lt;vector&lt;KeyPoint&gt;&gt; allKeypoints;
+ComputeKeyPointsOctTree(allKeypoints);
+...
+for (int level = 0; level &lt; nlevels; ++level)
+{
+    Mat workingMat = mvImagePyramid[level].clone();
+    GaussianBlur(workingMat, workingMat, Size(7,7), 2,2, BORDER_REFLECT_101);
+    Mat desc = cv::Mat(nkeypointsLevel, 32, CV_8U);
+    computeDescriptors(workingMat, keypoints, desc, pattern);
+    ...
+    if(level != 0)
+        keypoint-&gt;pt *= scale;
+}</code></pre></div></section>
+<section class="section"><h2>金字塔源码告诉了我们什么？</h2><div class="source-card"><div class="source-head"><strong>ComputePyramid</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/ORBextractor.cc#L1170-L1208">src/ORBextractor.cc:1170-1208</a></div><pre class="codeblock"><code>for (int level = 0; level &lt; nlevels; ++level)
+{
+    float scale = mvInvScaleFactor[level];
+    Size sz(cvRound(image.cols*scale), cvRound(image.rows*scale));
+    ...
+    if(level != 0)
+        resize(mvImagePyramid[level-1], mvImagePyramid[level], sz, 0,0, INTER_LINEAR);
+    ...
+}</code></pre></div></section>
+<section class="section"><h2>ORBmatcher 的两种典型策略</h2><div class="grid two"><div class="card"><h3>SearchByBoW</h3><p>不是对所有描述子做全连接比较。源码同时遍历 KeyFrame 和 Frame 的 <code>FeatureVector</code>，只在<strong>相同 vocabulary node</strong> 内比较描述子，并使用最佳/次佳距离比值筛选。</p><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/ORBmatcher.cc#L223-L330">src/ORBmatcher.cc:223-330</a></div><div class="card"><h3>SearchByProjection</h3><p>先把 MapPoint 的预测像素位置和预测尺度层用于 <code>GetFeaturesInArea</code> 缩小搜索范围，再比较 ORB descriptor。Tracking 的局部地图匹配主要靠这种“几何先验 + 描述子”的方式。</p><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/ORBmatcher.cc#L43-L140">src/ORBmatcher.cc:43-140</a></div></div></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>ORB 描述子每个关键点 32 bytes</h3><p>提取器创建 <code>nkeypoints × 32, CV_8U</code> 的 descriptor Mat。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>BoW 匹配不是单纯最近邻</h3><p>它先用词袋节点限制候选集合，再做 Hamming 距离/ratio 筛选。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>Projection 匹配把几何先验用在前面</h3><p>MapPoint 的投影位置、尺度层、观察方向先缩小候选，再比较描述子。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>所以 ORB-SLAM3 的“特征法”并不等于只靠 descriptor</h3><p>实际代码把金字塔尺度、词袋节点、投影几何、观察方向等共同用于匹配。</p></div></div></section>
+</main><div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code> master @ <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。</div><script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>

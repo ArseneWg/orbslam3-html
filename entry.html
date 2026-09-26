@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>数据入口：例子程序如何把图像和 IMU 送入系统</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="active">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>数据入口：例子程序如何把图像和 IMU 送入系统</h1>
+        <p>从例子程序入手是读 ORB-SLAM3 最省力的方式：你能直接看到输入长什么样、系统真正暴露了什么接口。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="entry"></div>
+      </div>
+    </section>
+    
+  <main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>这一页讲什么？</h2>
+      <p>从 <code>Examples/Monocular-Inertial/mono_inertial_*.cc</code> 的例子程序开始，回答三个问题：</p>
+      <ul class="simple-list">
+        <li>图像和 IMU 是如何从数据集文件读进来的？</li>
+        <li>为什么 IMU 不是“一次一条地立即计算”，而是要按图像帧切片打包？</li>
+        <li>最终传入核心系统的数据结构是什么？</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>输入形式</h2>
+      <p>单目 + IMU 的典型输入不是“同步对齐的一张图 + 一条 IMU”，而是：</p>
+      <pre id="entryInput">图像帧 k      : I_k, timestamp t_k
+图像帧 k+1    : I_{k+1}, timestamp t_{k+1}
+IMU 序列      : {u_i | t_k &lt;= t_i &lt;= t_{k+1}}
+系统调用      : TrackMonocular(I_{k+1}, t_{k+1}, vImuMeas)</pre>
+      <div class="button-row"><button class="btn" data-copy="#entryInput">复制</button></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>入口流程图</h2>
+  <div class="card">
+    <figure class="figure">
+      <svg viewBox="0 0 980 280" width="100%" height="100%" aria-label="entry flow">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#67d5ff"/></marker>
+        </defs>
+        <rect x="30" y="50" width="160" height="70" rx="16" fill="#15203c" stroke="#67d5ff"/>
+        <text x="110" y="83" text-anchor="middle" fill="#e8eefc" font-size="20">LoadImages</text>
+        <text x="110" y="107" text-anchor="middle" fill="#9eb0d8" font-size="13">读取图像路径与时间戳</text>
+        <rect x="230" y="50" width="160" height="70" rx="16" fill="#15203c" stroke="#8cffb7"/>
+        <text x="310" y="83" text-anchor="middle" fill="#e8eefc" font-size="20">LoadIMU</text>
+        <text x="310" y="107" text-anchor="middle" fill="#9eb0d8" font-size="13">读取角速度/加速度/时间戳</text>
+        <rect x="430" y="40" width="180" height="90" rx="18" fill="#17213d" stroke="#ffd166"/>
+        <text x="520" y="74" text-anchor="middle" fill="#e8eefc" font-size="19">按相邻图像时间窗</text>
+        <text x="520" y="98" text-anchor="middle" fill="#e8eefc" font-size="19">组装 vImuMeas</text>
+        <text x="520" y="120" text-anchor="middle" fill="#9eb0d8" font-size="13">将 t_k 到 t_{k+1} 之间的 IMU 点打包</text>
+        <rect x="660" y="40" width="280" height="90" rx="18" fill="#17213d" stroke="#67d5ff"/>
+        <text x="800" y="73" text-anchor="middle" fill="#e8eefc" font-size="19">SLAM.TrackMonocular(im, t, vImuMeas)</text>
+        <text x="800" y="100" text-anchor="middle" fill="#9eb0d8" font-size="14">例子程序把“单张图像 + 一段 IMU 轨迹切片”交给核心系统</text>
+        <line x1="190" y1="85" x2="230" y2="85" stroke="#67d5ff" stroke-width="3" marker-end="url(#arrow)"/>
+        <line x1="390" y1="85" x2="430" y2="85" stroke="#67d5ff" stroke-width="3" marker-end="url(#arrow)"/>
+        <line x1="610" y1="85" x2="660" y2="85" stroke="#67d5ff" stroke-width="3" marker-end="url(#arrow)"/>
+        <rect x="120" y="185" width="720" height="52" rx="14" fill="#0c1428" stroke="#293659"/>
+        <text x="480" y="218" text-anchor="middle" fill="#d8e5ff" font-size="15">关键理解：系统不是“图像和 IMU 完全同步逐点融合”，而是以图像帧为主节拍，把两帧之间的 IMU 序列作为辅助运动约束。</text>
+      </svg>
+      <figcaption>例子程序是非常关键的“源码切入点”：它把抽象的视觉惯性系统 concretize 成了几个非常明确的输入数组与一次系统调用。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h3>为什么要按图像帧切片收集 IMU？</h3>
+      <p>ORB-SLAM3 的前端仍以图像帧为“主事件”。每来一张图，系统都会建立一个 <code>Frame</code> 并更新当前位姿。IMU 的角色是帮助系统在相邻图像之间做更合理的运动预测与后端约束。所以例子程序的自然工作方式是：<strong>每处理一张图，就把上次图像时刻到本次图像时刻之间的 IMU 片段一并提交</strong>。</p>
+      <div class="note">这也是你以后接实时传感器时最该模仿的接口行为：图像是主时钟，IMU 是帧间补偿与优化约束。</div>
+    </div>
+    <div class="card">
+      <h3>你在这里能观察到的源码事实</h3>
+      <ul class="simple-list">
+        <li>例子程序负责数据集 I/O，而不是 System 或 Tracking 去自己读文件。</li>
+        <li>传入系统的 IMU 结构是一个向量，不是单个采样点。</li>
+        <li>真正对外暴露的前端入口是 <code>TrackMonocular()</code>，所以你自己做数据接入时也应模仿这个形状。</li>
+        <li>单目惯性模式下，Sensor 枚举值是 <code>IMU_MONOCULAR</code>，在构造 <code>System</code> 时就已确定。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码锚点</h2>
+  <div class="card">
+    <ul class="simple-list source-list">
+      <li><code>Examples/Monocular-Inertial/mono_inertial_euroc.cc</code>：典型 EuRoC 单目惯性例子。</li>
+      <li><code>Examples/Monocular-Inertial/mono_inertial_tum_vi.cc</code>：典型 TUM-VI 单目惯性例子。</li>
+      <li>你重点要关注：加载时间戳、收集当前图像前的 IMU 段、然后调用 <code>SLAM.TrackMonocular(..., vImuMeas)</code> 的那一段循环。</li>
+    </ul>
+  </div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

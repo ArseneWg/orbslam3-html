@@ -1,0 +1,39 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>System 精读：多线程 SLAM 是怎样被装配起来的</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="">入口精读</a><a href="src_system.html" class="active">System 精读</a><a href="src_orb.html" class="">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="">初始化精读</a><a href="src_imu.html" class="">IMU 精读</a><a href="src_local_mapping.html" class="">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="">Optimizer 精读</a><a href="src_objects.html" class="">对象与图结构</a></nav></div></header>
+<section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>System 精读：多线程 SLAM 是怎样被装配起来的</h1><p>从构造函数和 TrackMonocular 两个入口看清对象生命周期、线程边界和模块间数据转交。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="system"></div></div></section>
+<main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>构造期到底创建了什么？</h2><div class="timeline"><div class="item">加载 <code>ORBVocabulary</code></div><div class="item">创建 <code>KeyFrameDatabase</code></div><div class="item">新建或加载 <code>Atlas</code></div><div class="item">创建 <code>Tracking</code>（仍运行在调用者线程）</div><div class="item">创建并启动 <code>LocalMapping::Run</code> 线程</div><div class="item">创建并启动 <code>LoopClosing::Run</code> 线程</div><div class="item">可选创建 Viewer 线程</div></div></div><div class="card"><h2>线程拓扑的关键事实</h2><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>Tracking 不是 new thread 启动的</h3><p>源码注释明确写着 Tracking “will live in the main thread of execution”。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>LocalMapping 与 LoopClosing 是后台线程</h3><p>构造函数分别用 <code>new thread(&...::Run)</code> 启动。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>线程对象之间被显式注入指针</h3><p>Tracker / LocalMapper / LoopCloser 都通过 SetXXX 互相连接。</p></div></div></div></section>
+<section class="section"><h2>线程装配源码</h2><div class="source-card"><div class="source-head"><strong>System 构造：模块和线程装配</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/System.cc#L166-L215">src/System.cc:166-215</a></div><pre class="codeblock"><code>mpTracker = new Tracking(this, mpVocabulary, mpFrameDrawer, mpMapDrawer,
+                         mpAtlas, mpKeyFrameDatabase, strSettingsFile,
+                         mSensor, settings_, strSequence);
+
+mpLocalMapper = new LocalMapping(this, mpAtlas,
+    mSensor==MONOCULAR || mSensor==IMU_MONOCULAR,
+    mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO || mSensor==IMU_RGBD,
+    strSequence);
+mptLocalMapping = new thread(&amp;ORB_SLAM3::LocalMapping::Run, mpLocalMapper);
+
+mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary,
+                                mSensor!=MONOCULAR, activeLC);
+mptLoopClosing = new thread(&amp;ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
+
+mpTracker-&gt;SetLocalMapper(mpLocalMapper);
+mpTracker-&gt;SetLoopClosing(mpLoopCloser);
+mpLocalMapper-&gt;SetTracker(mpTracker);
+mpLocalMapper-&gt;SetLoopCloser(mpLoopCloser);
+mpLoopCloser-&gt;SetTracker(mpTracker);
+mpLoopCloser-&gt;SetLocalMapper(mpLocalMapper);</code></pre></div></section>
+<section class="section"><h2>TrackMonocular 不是算法本体</h2><div class="source-card"><div class="source-head"><strong>System::TrackMonocular 的核心工作</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/System.cc#L462-L480">src/System.cc:462-480</a></div><pre class="codeblock"><code>if (mSensor == System::IMU_MONOCULAR)
+    for(size_t i_imu = 0; i_imu &lt; vImuMeas.size(); i_imu++)
+        mpTracker-&gt;GrabImuData(vImuMeas[i_imu]);
+
+Sophus::SE3f Tcw = mpTracker-&gt;GrabImageMonocular(imToFeed,timestamp,filename);
+
+mTrackingState = mpTracker-&gt;mState;
+mTrackedMapPoints = mpTracker-&gt;mCurrentFrame.mvpMapPoints;
+mTrackedKeyPointsUn = mpTracker-&gt;mCurrentFrame.mvKeysUn;
+return Tcw;</code></pre></div></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>System 是调度层，不是前端算法层</h3><p>它把 IMU 样本推入 Tracker 队列，再把图像送给 GrabImageMonocular，最后缓存结果。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>IMU 样本先入队，图像随后触发计算</h3><p>从调用顺序看，当前帧的 IMU 包先被 GrabImuData 全部加入队列，然后才处理图像。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>定位模式会停 LocalMapping</h3><p>TrackMonocular 中的 localization mode 分支会 RequestStop LocalMapper，并把 Tracker 切到 only tracking。</p></div><div class="kp derived"><div class="kp-kind">由源码行为推导</div><h3>线程间共享地图需要显式同步</h3><p>System 和后续模块频繁使用 mutex；这是多线程 SLAM 设计必然带来的同步成本。</p></div></div></section>
+</main>
+<div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code>，官方 <code>master</code>，commit <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。页面中“源码直接可见”仅陈述代码本身；“由源码行为推导”用于解释代码设计含义，并明确与直接事实区分。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>

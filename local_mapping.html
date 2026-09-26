@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Local Mapping：关键帧如何长成局部地图</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU 学习站</div><nav class="main"><a href="index.html" class="">总览</a><a href="overview.html" class="">框架总览</a><a href="entry.html" class="">数据入口</a><a href="system.html" class="">System 启动</a><a href="tracking.html" class="">Tracking 前端</a><a href="init.html" class="">单目初始化</a><a href="imu.html" class="">IMU 预积分</a><a href="local_mapping.html" class="active">Local Mapping</a><a href="loop_closing.html" class="">Loop Closing</a><a href="optimizer.html" class="">Optimizer</a><a href="data_structures.html" class="">核心数据结构</a></nav></div></header>
+  
+    <section class="hero">
+      <div class="panel hero-left">
+        <div class="badge">基于 ORB-SLAM3 官方源码结构整理</div>
+        <h1>Local Mapping：关键帧如何长成局部地图</h1>
+        <p>真正把“跟踪结果”变成“可用地图”的，是 Local Mapping 这个后台线程。</p>
+        <div class="button-row">
+          <a class="btn primary" href="index.html">回到首页</a>
+          <a class="btn" href="#sources">查看源码锚点</a>
+        </div>
+      </div>
+      <div class="panel hero-right">
+        <div class="mini3d" data-scene="localmap"></div>
+      </div>
+    </section>
+    
+  <main class="container">
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h2>Local Mapping 的定位</h2>
+      <p>Tracking 负责“这帧先别丢”，Local Mapping 负责“让局部地图越来越好”。它是独立后台线程，持续从队列中取出新的关键帧，做地图维护和局部优化。</p>
+    </div>
+    <div class="card">
+      <h2>典型工作项</h2>
+      <ul class="simple-list">
+        <li>ProcessNewKeyFrame：接纳新关键帧，建立与已有地图的连接关系。</li>
+        <li>MapPointCulling：剔除不稳定或质量差的地图点。</li>
+        <li>CreateNewMapPoints：与邻近关键帧三角化，生成更多地图点。</li>
+        <li>SearchInNeighbors：在邻居关键帧间融合重复点。</li>
+        <li>Local BA / Inertial BA：优化局部结构。</li>
+        <li>KeyFrameCulling：裁剪冗余关键帧。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Run() 线程主循环可以粗略拆成什么？</h2>
+  <div class="card">
+    <div class="callstack">
+      <ol>
+        <li>等待关键帧队列中出现新关键帧。</li>
+        <li>一旦有新关键帧：处理它、更新共视图、关联/新建地图点。</li>
+        <li>执行地图点裁剪与邻接关键帧三角化。</li>
+        <li>如果当前没有新的关键帧打断，就进入局部优化阶段。</li>
+        <li>在 Mono + IMU 模式下，若条件满足，会进入 <code>InitializeIMU()</code> 或后续惯性优化路径。</li>
+        <li>最后做关键帧裁剪，并把处理结果暴露给其他线程。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid three">
+    <div class="card"><h3>ProcessNewKeyFrame</h3><p>新关键帧进入地图后，要计算其 BoW、更新与地图点的观测关系、维护共视图。它决定这帧如何正式“入图”。</p></div>
+    <div class="card"><h3>CreateNewMapPoints</h3><p>关键帧的价值之一，是提供更稳定的多视角几何关系。局部建图会利用当前关键帧和邻居关键帧三角化更多新地图点。</p></div>
+    <div class="card"><h3>KeyFrameCulling</h3><p>不是关键帧越多越好。冗余关键帧会增加计算负担，还可能让图优化变重，所以需要在覆盖关系充分时裁剪它们。</p></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="grid two">
+    <div class="card">
+      <h3>Mono + IMU 为何把 InitializeIMU 放在这里？</h3>
+      <p>因为惯性初始化需要观察一段关键帧窗口中的运动，而不是只看当前帧。Local Mapping 恰好维护了这样的局部关键帧图，并且拥有执行局部优化的控制权，所以视觉惯性初始化自然落在这里。</p>
+      <div class="note success">这也解释了：前端完成单目初始化之后，系统不会立刻“完全变成有尺度”，而是需要等待局部建图线程在合适时机完成惯性初始化。</div>
+    </div>
+    <div class="card">
+      <h3>读码时不要漏掉的对象交互</h3>
+      <ul class="simple-list">
+        <li>LocalMapping 与 Tracking 之间存在“能否插入关键帧”的协作。</li>
+        <li>LocalMapping 会把处理完的关键帧也推给 LoopClosing。</li>
+        <li>地图点与关键帧的连接关系不是静态的，会被创建、替换、融合和剔除。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sources">
+  <h2>源码锚点</h2>
+  <div class="card"><ul class="simple-list source-list">
+    <li><code>src/LocalMapping.cc</code>：<code>Run()</code>、<code>ProcessNewKeyFrame()</code>、<code>MapPointCulling()</code>、<code>CreateNewMapPoints()</code>、<code>SearchInNeighbors()</code>、<code>InitializeIMU()</code>、<code>KeyFrameCulling()</code>。</li>
+    <li><code>src/KeyFrame.cc</code>、<code>src/MapPoint.cc</code>：关键帧与地图点关系维护的底层对象语义。</li>
+  </ul></div>
+</section>
+</main>
+  <div class="footer">本学习站的知识组织方式来自对 ORB-SLAM3 官方仓库中 <code>Examples/Monocular-Inertial</code>、<code>include/</code>、<code>src/</code> 目录的源码阅读与工程化整理；解释围绕源码可观察到的模块关系、函数职责与调用顺序展开，不凭空扩写论文之外的“神秘模块”。</div>
+  <script src="assets/app.js"></script>
+  <script src="assets/mini3d.js"></script>
+</body>
+</html>

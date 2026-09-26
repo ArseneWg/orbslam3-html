@@ -1,0 +1,46 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IMU 精读：预积分、状态传播、尺度与重力初始化</title><link rel="stylesheet" href="assets/styles.css"><link rel="stylesheet" href="assets/source.css"></head><body>
+<header class="topbar"><div class="inner"><div class="brand"><span class="dot"></span>ORB-SLAM3 Mono+IMU · 源码精读</div><nav class="main"><a href="source_index.html" class="">源码路线</a><a href="src_entry.html" class="">入口精读</a><a href="src_system.html" class="">System 精读</a><a href="src_orb.html" class="">ORB 特征</a><a href="src_tracking.html" class="">Tracking 精读</a><a href="src_init.html" class="">初始化精读</a><a href="src_imu.html" class="active">IMU 精读</a><a href="src_local_mapping.html" class="">LocalMapping 精读</a><a href="src_loop_closing.html" class="">LoopClosing 精读</a><a href="src_optimizer.html" class="">Optimizer 精读</a><a href="src_objects.html" class="">对象与图结构</a></nav></div></header>
+<section class="hero source-hero"><div class="panel hero-left"><div class="badge">Stage 2 · official master @ 4452a3c4</div><h1>IMU 精读：预积分、状态传播、尺度与重力初始化</h1><p>用源码把“IMU 融合”拆成队列、预积分、预测、惯性初始化和后续 VIBA 几个明确阶段。</p><div class="button-row"><a class="btn" href="index.html">阶段一概览</a><a class="btn primary" href="source_index.html">源码精读首页</a></div></div><div class="panel hero-right"><div class="mini3d" data-scene="imu"></div></div></section>
+<main class="container">
+<section class="section"><div class="grid two"><div class="card"><h2>IMU 在源码里有三条主线</h2><div class="timeline"><div class="item"><strong>队列：</strong><code>GrabImuData</code> 把测量放进 <code>mlQueueImuData</code></div><div class="item"><strong>帧间预积分：</strong><code>PreintegrateIMU</code></div><div class="item"><strong>地图级初始化：</strong><code>LocalMapping::InitializeIMU</code></div></div></div><div class="card"><h2>不要混淆两个 Preintegrated</h2><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>FromLastFrame</h3><p><code>pImuPreintegratedFromLastFrame</code> 只覆盖上一 Frame → 当前 Frame。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>FromLastKF</h3><p><code>mpImuPreintegratedFromLastKF</code> 从上一个 KeyFrame 持续累计到当前 Frame。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>二者都在同一批 IMU 上 IntegrateNewMeasurement</h3><p>同一段 acc/gyro/tstep 会同时积到两个对象里。</p></div></div></div></section>
+<section class="section"><h2>PreintegrateIMU 如何切出当前帧需要的 IMU？</h2><div class="source-card"><div class="source-head"><strong>按上一帧/当前帧时间边界筛选 IMU</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L1643-L1665">src/Tracking.cc:1643-1665</a></div><pre class="codeblock"><code>if(m-&gt;t &lt; mCurrentFrame.mpPrevFrame-&gt;mTimeStamp-mImuPer)
+    mlQueueImuData.pop_front();
+else if(m-&gt;t &lt; mCurrentFrame.mTimeStamp-mImuPer)
+{
+    mvImuFromLastFrame.push_back(*m);
+    mlQueueImuData.pop_front();
+}
+else
+{
+    mvImuFromLastFrame.push_back(*m);
+    break;
+}</code></pre></div></section>
+<section class="section"><h2>积分时如何处理边界？</h2><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>内部区间使用相邻样本平均</h3><p>中间测量直接对相邻 acc / gyro 取 0.5 平均，tstep 是两个 IMU 时间戳之差。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>首尾区间做插值</h3><p>第一段和最后一段会根据 Frame 时间戳与 IMU 时间戳的偏移，对 acc/gyro 做边界插值。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>预积分同时更新两条时间跨度</h3><p>每次循环分别调用 FromLastKF 和 FromLastFrame 的 <code>IntegrateNewMeasurement</code>。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>预积分完成后把对象挂回 CurrentFrame</h3><p>设置 <code>mpImuPreintegratedFrame</code>、<code>mpImuPreintegrated</code> 和 <code>mpLastKeyFrame</code>。</p></div></div></section>
+<section class="section"><h2>PredictStateIMU：源码里的状态传播公式</h2><div class="source-card"><div class="source-head"><strong>从预积分量预测旋转、位置、速度</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Tracking.cc#L1740-L1782">src/Tracking.cc:1740-1782</a></div><pre class="codeblock"><code>Rwb2 = NormalizeRotation(
+  Rwb1 * preint.GetDeltaRotation(bias));
+
+twb2 = twb1 + Vwb1*t12 + 0.5f*t12*t12*Gz
+      + Rwb1*preint.GetDeltaPosition(bias);
+
+Vwb2 = Vwb1 + t12*Gz
+      + Rwb1*preint.GetDeltaVelocity(bias);
+
+mCurrentFrame.SetImuPoseVelocity(Rwb2,twb2,Vwb2);</code></pre></div></section>
+<section class="section"><h2>InitializeIMU 的源码门槛</h2><table class="table threshold-table"><tr><th>条件</th><th>Mono+IMU</th><th>源码行为</th></tr><tr><td>最少关键帧</td><td>10</td><td>不足直接 return</td></tr><tr><td>最短时间</td><td>2.0 s</td><td>当前 KF - 第一个 KF 小于门槛直接 return</td></tr><tr><td>初始 scale</td><td>1.0</td><td>作为 InertialOptimization 初值</td></tr><tr><td>优化后 scale</td><td>&lt;0.1 视为失败</td><td>退出初始化</td></tr></table></section>
+<section class="section"><h2>真正被 InertialOptimization 优化的变量</h2><div class="source-card"><div class="source-head"><strong>惯性初始化图中的变量</strong><a class="src-link" target="_blank" rel="noreferrer" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4/src/Optimizer.cc#L3064-L3120">src/Optimizer.cc:3064-3120</a></div><pre class="codeblock"><code>// KeyFrame pose vertices are fixed
+VertexPose *VP = new VertexPose(pKFi);
+VP-&gt;setFixed(true);
+
+// velocities are optimizable
+VertexVelocity* VV = new VertexVelocity(pKFi);
+VV-&gt;setFixed(bFixedVel);
+
+VertexGyroBias* VG = new VertexGyroBias(vpKFs.front());
+VertexAccBias*  VA = new VertexAccBias(vpKFs.front());
+VertexGDir*     VGDir = new VertexGDir(Rwg);
+VertexScale*    VS = new VertexScale(scale);
+VS-&gt;setFixed(!bMono);</code></pre></div></section>
+<section class="section"><div class="kp-grid"><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>单目时 scale 是优化变量</h3><p>源码明确 <code>VS->setFixed(!bMono)</code>，因此 bMono=true 时 scale 不固定。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>姿态在这一步固定</h3><p>InertialOptimization 为每个 KeyFrame 创建 VertexPose 并 setFixed(true)，说明该步骤主要利用已有视觉轨迹解惯性量。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>优化完成后地图整体被缩放/旋转</h3><p>InitializeIMU 调 <code>ApplyScaledRotation(Twg, mScale, true)</code>，随后更新 Tracker 的 IMU 状态。</p></div><div class="kp direct"><div class="kp-kind">源码直接可见</div><h3>初始化不是一次结束</h3><p>LocalMapping 后续还有 VIBA1、VIBA2 和 ScaleRefinement。</p></div></div></section>
+</main>
+<div class="footer">源码基线：<code>UZ-SLAMLab/ORB_SLAM3</code>，官方 <code>master</code>，commit <code>4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4</code>。页面中“源码直接可见”仅陈述代码本身；“由源码行为推导”用于解释代码设计含义，并明确与直接事实区分。</div>
+<script src="assets/app.js"></script><script src="assets/mini3d.js"></script><script src="assets/source.js"></script></body></html>
