@@ -12,7 +12,7 @@ formula('Δtᵢ = tᵢ₊₁ − tᵢ<br>ΔT = ∑ Δtᵢ = t_end − t_start',[
 ['tᵢ','第 i 条测量的采集时间，单位 s，不是处理该消息的墙钟时间。'],['Δtᵢ','一段积分时间，单位 s。'],['ΔT','上一图像状态到当前图像状态的总跨度，单位 s。']
 ],'对齐边界的均匀例子里，点数减1才等于积分段数。','首尾不对齐时，不能机械累加完整小区间；PreintegrateIMU 对首尾的测量平均与 tstep 有单独分支。')+
 steps([['先确认单位','5,000,000 ns ÷ 1,000,000,000 = 0.005 s。CSV时间戳很长，不等于运动持续了很久。'],['再确认字段次序','EuRoC CSV是时间、角速度、加速度计；构造 IMU::Point 时却先传 acc，再传 gyro，再传 time。'],['最后检查边界','first_imu 是输入层游标；mlQueueImuData 是 Tracking 内部队列。前者不重复提交，与后者保留边界测量不是同一件事。']]),
-[['Examples/Monocular-Inertial/mono_inertial_euroc.cc',106,110],['Examples/Monocular-Inertial/mono_inertial_euroc.cc',169,195],['Examples/Monocular-Inertial/mono_inertial_euroc.cc',276,313],['src/Tracking.cc',1624,1734]]);
+[['Examples/Monocular-Inertial/mono_inertial_euroc.cc',106,110],['Examples/Monocular-Inertial/mono_inertial_euroc.cc',169,195],['Examples/Monocular-Inertial/mono_inertial_euroc.cc',276,310],['src/Tracking.cc',1624,1734]]);
 let offset=box(20,45,280,72,'图像曝光时刻 t','观测的是这一时刻的方向')+box(410,45,285,72,'错配的 IMU 时刻 t+δt','设备已经多转动了一小段');
 offset+=edge([[305,81],[406,81]],'时间错位',309,53)+t(32,180,'不是“程序算得慢”，而是拿两个不同物理时刻做同一次融合。',17)+edge([[120,255],[610,255]]);
 offset+=dot(340,255,'图像观测')+`<circle class="v-predicted" cx="440" cy="255" r="10"/>`+t(420,220,'错位预测',15)+t(190,307,'图中偏移被夸大显示；下方算例才给定量值。',14);
