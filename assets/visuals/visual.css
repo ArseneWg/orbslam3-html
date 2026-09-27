@@ -1,0 +1,46 @@
+/* Additive styles. Inherit the approved reader's typography and colours. */
+body.book .v-lesson{margin:30px 0 28px;border-top:1px solid var(--stroke,#e0e6df);padding-top:22px;min-width:0}
+body.book .v-lesson h3{font-family:var(--sans);font-size:20px;font-weight:600;line-height:1.65;margin:25px 0 15px;color:var(--ink)}
+body.book .v-lesson p{font-size:var(--read-size,17px);line-height:1.95;margin:12px 0 20px;overflow-wrap:anywhere}
+body.book .v-figure,body.book .v-lab{margin:23px 0 27px;padding:18px;border:1px solid var(--stroke,#e0e6df);background:var(--canvas,#f7f8f5);border-radius:8px;min-width:0}
+body.book .v-figure-head{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;margin-bottom:16px}
+body.book .v-figure-head button,body.book .v-close{background:#fff;border:1px solid #bdccbf;border-radius:5px;padding:5px 10px;font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
+body.book .v-canvas{overflow-x:auto;border-radius:5px;background:#fff;padding:12px 0}
+body.book .v-canvas svg,body.book .v-lab-plot svg{display:block;width:100%;height:auto;min-width:580px;max-height:none}
+body.book .v-canvas svg text,body.book .v-lab-plot svg text,body.book .v-dialog svg text{font-family:var(--sans);fill:#304c3b}
+body.book .v-node rect,body.book .v-dialog .v-node rect{fill:#f5f8f3;stroke:#8baa93;stroke-width:1.2}
+body.book .v-node.v-highlight rect{fill:#e9eef7;stroke:#637d9a}
+body.book .v-edge polyline,body.book .v-dialog .v-edge polyline{fill:none;stroke:#557b62;stroke-width:1.8}
+body.book .v-edge text{fill:#56695d}
+body.book .v-figure circle,body.book .v-lab circle{fill:#226249}
+body.book .v-predicted{fill:none!important;stroke:#9d6345;stroke-width:2}
+body.book .v-figure figcaption{font-size:13px;line-height:1.8;color:var(--subtle);margin-top:16px}
+body.book .v-transcript{margin-top:14px;font-size:13px}
+body.book .v-transcript summary{cursor:pointer;color:var(--green)}
+body.book .v-transcript p{font-size:14px}
+body.book .v-formula{background:var(--wash,#eef5ef);padding:18px 20px;margin:24px 0;border-left:3px solid #71977e}
+body.book .v-expression{font-family:'Cambria Math',var(--sans);font-size:21px;line-height:2;overflow-x:auto;padding:0 0 12px;white-space:nowrap;color:#153e2b}
+body.book .v-formula .v-meaning{font-size:16px}
+body.book .v-formula .v-assumption{font-size:14px;color:var(--subtle)}
+body.book .v-table-scroll{max-width:100%;overflow-x:auto;margin:16px 0}
+body.book .v-table-scroll table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.85;table-layout:fixed}
+body.book .v-table-scroll th,body.book .v-table-scroll td{text-align:left;vertical-align:top;padding:11px 12px;border-bottom:1px solid #d5ded4;overflow-wrap:anywhere}
+body.book .v-table-scroll th{font-weight:600}
+body.book .v-steps{padding-left:23px;counter-reset:step}
+body.book .v-steps li{margin:15px 0;padding-left:6px;line-height:1.85;font-size:16px}
+body.book .v-steps p{font-size:16px;margin-top:7px}
+body.book .v-note{border-left:3px solid #799381;padding:12px 18px;background:#f6f8f3;margin:24px 0}
+body.book .v-note p{font-size:15px;margin:8px 0}
+body.book .v-sources{display:flex;flex-direction:column;gap:7px;font-size:12px;border-top:1px dashed var(--stroke);padding-top:15px;margin-top:20px;overflow-wrap:anywhere}
+body.book .v-toc-child{font-size:11px;padding-left:8px}
+body.book .v-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 25px;margin:18px 0}
+body.book .v-controls label{font-size:14px;display:grid;gap:6px}
+body.book .v-controls input{width:100%;accent-color:var(--green)}
+body.book .v-controls output{font:13px var(--mono);color:var(--green)}
+body.book .v-lab-plot{overflow-x:auto;background:#fff;border:1px solid var(--stroke);margin-top:20px}
+body.book .v-lab .v-lab-result{font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+body.book .v-dialog{border:1px solid #c5d4c6;border-radius:9px;width:min(1100px,92vw);max-height:90vh;padding:24px;overflow:auto;color:var(--ink);background:#fff}
+body.book .v-dialog svg{width:100%;min-width:580px;display:block}
+body.book .v-dialog::backdrop{background:#122219a8}
+body.book .v-dialog p{font-size:14px;line-height:1.9}
+@media(max-width:600px){body.book .v-figure,body.book .v-lab{padding:12px}body.book .v-figure-head{align-items:flex-start}body.book .v-controls{grid-template-columns:1fr}body.book .v-expression{font-size:18px}body.book .v-formula{padding:14px 12px}body.book .v-table-scroll th,body.book .v-table-scroll td{padding:9px 7px}body.book .v-lesson h3{font-size:19px}}
