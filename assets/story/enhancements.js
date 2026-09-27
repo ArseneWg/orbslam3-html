@@ -55,3 +55,66 @@ S.renderers.solve=(v,p,l)=>{const r=renderSolve(v,p,l),host=document.createEleme
 const mount=S.mount;
 S.mount=()=>{if(S.chapters.start){const l=S.chapters.start.lessons[2];l.kind='whole';l.scene='从采集到输出：明确初始化分支、后台队列和地图反馈';}mount();const toc=document.querySelector('.toc');if('IntersectionObserver' in window&&toc){const observer=new IntersectionObserver(entries=>{for(const e of entries){if(!e.isIntersecting)continue;toc.querySelectorAll('a').forEach(a=>a.classList.toggle('current',a.hash==='#'+e.target.id));}},{rootMargin:'-100px 0px -55% 0px'});document.querySelectorAll('.st-lesson').forEach(el=>observer.observe(el));}};
 })();
+
+/* Completion review: keep visual state consistent with selected inputs. */
+(() => {
+'use strict';
+const S=ORB_STORY, green='#226249', blue='#52749e', orange='#b86f3f', muted='#acbfb0';
+// Explanatory step selection must not advance a slider explicitly set to zero.
+const renderQueue=S.renderers.queue;
+S.renderers.queue=(v,p,l)=>{
+ const tick=Math.round(v.tick??p),r=renderQueue({...v,tick},tick,l);
+ r.metrics.tick=tick;
+ return r;
+};
+// Draw the integrated interval only up to the image timestamp, not to the next sample.
+S.renderers.timeline=(v,p,l)=>{
+ const end=v.end??50,dt=5,x=t=>55+t*11.8;
+ const full=Math.floor(end/dt),partial=end-full*dt;
+ let g=S.t(22,24,'毫秒时间轴：采样点是读数，小段才是积分时长',13)+S.line([55,205],[677,205],muted);
+ for(let k=0;k<=10;k++){
+  const time=k*dt;
+  g+=S.dot(x(time),205,5,time<=end?green:muted)+S.t(x(time),237,String(time),11,'#5e7467','middle');
+  if(k<10&&p>0){
+   g+=S.line([x(time),182],[x(time+dt),182],'#dae3d9',4);
+   const segmentEnd=Math.min(end,time+dt);
+   if(segmentEnd>time)g+=S.line([x(time),182],[x(segmentEnd),182],orange,4);
+  }
+ }
+ g+=S.box(30,62,200,64,'上一图像 t₀','0 ms')+S.box(430,62,234,64,'当前图像 t₁',`${end} ms`);
+ g+=S.line([x(0),126],[x(0),215],blue,1.5,'5 3')+S.line([x(end),126],[x(end),215],blue,1.5,'5 3');
+ g+=S.t(28,284,partial?`${full} 个完整 5 ms 小段 + 末尾 ${partial} ms`:`${full} 个完整 5 ms 小段；没有额外末段`,15);
+ g+=S.t(28,310,'灰点保留采样网格作参照；橙条总长严格等于图像间隔。',12);
+ return {html:S.svg(g,720,342,'采样点与按图像时刻截取的积分区间'),
+ text:`图像间隔 ${end} ms = ${full} × 5 ms${partial?` + ${partial} ms`:''}。${partial?'末段只画到蓝色时间边界，不把之后的整段算进去。':'位于采样刻度上；点数和时间段数仍是两个概念。'}`,
+ metrics:{duration:end/1000,fullSegments:full,partialMilliseconds:partial}};
+};
+// Fix the drawing domain, shared by the original chain and its fully corrected version.
+// Coordinates are fitted isotropically; moving the slider never changes the viewing scale.
+S.renderers.loop=(v,p,l)=>{
+ const alpha=v.correct??0,steps=[[1,0],[1.05,1],[0,1.05],[-1.05,.05],[-1.05,-1],[.25,-.9]];
+ const sum=steps.reduce((s,a)=>[s[0]+a[0],s[1]+a[1]],[0,0]),mean=sum.map(a=>a/steps.length);
+ const walk=c=>{const a=[[0,0]];steps.forEach(d=>a.push([a.at(-1)[0]+d[0]-c*mean[0],a.at(-1)[1]+d[1]-c*mean[1]]));return a;};
+ const old=walk(0),now=walk(alpha),domain=[...old,...walk(1)];
+ const xs=domain.map(a=>a[0]),ys=domain.map(a=>a[1]);
+ const xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+ const scale=Math.min(240/(xmax-xmin),220/(ymax-ymin));
+ const q=a=>[55+(240-(xmax-xmin)*scale)/2+(a[0]-xmin)*scale,265-(220-(ymax-ymin)*scale)/2-(a[1]-ymin)*scale];
+ let g=S.curve(old.map(q),muted,2)+S.curve(now.map(q),green,3);
+ now.forEach((a,i)=>g+=S.dot(...q(a),5,i===6?orange:green,i===0?'起点':i===6?'终点':''));
+ g+=S.line(q(now[0]),q(now.at(-1)),orange,2,'6 4')+S.t(20,295,'固定观察比例；绿色表示应用当前修正后的链。',11);
+ const h=S.t(22,42,'回到起点的证据，多添一条约束',15)+S.t(22,100,'闭合误差分配到多个相对运动',15)+S.t(22,153,`原闭合偏差：(${S.f(sum[0])},${S.f(sum[1])})`,16,orange)+S.t(22,207,`每段完整修正：(${S.f(mean[0],3)},${S.f(mean[1],3)})`,15,green)+S.t(22,267,'仅等权二维平移链，不运行真实全局 BA。',11);
+ return {html:S.pair(S.panel('灰线是原估计，绿线是受约束后的链',S.svg(g,360,315)),S.panel('回环不是只改最后一个点',S.svg(h,360,315))),
+ text:`等权二维闭合链：每段减去平均闭合误差。当前应用 ${S.f(alpha*100,0)}%；所有关键帧始终在画框内，坐标比例不变。不是实际 SE3/Sim3 优化轨迹。`,
+ metrics:{closure:Math.hypot(...sum)*(1-alpha),screenPoints:[...old,...now].map(q)}};
+};
+const mount=S.mount;
+S.mount=()=>{
+ mount();
+ const key=ORB_BOOK.aliases[window.BOOK_PAGE||location.pathname.split('/').pop()||'index.html']||'start';
+ const c=S.chapters[key];if(!c)return;
+ const label=l=>(l.short||l.title).replace(/^\s*\d+[.、．]\s*/,'');
+ document.querySelectorAll('.st-intro nav a').forEach((a,i)=>a.textContent=`${i+1}. ${label(c.lessons[i])}`);
+ document.querySelectorAll('.toc a[href^="#story-"]').forEach((a,i)=>a.textContent=`${i+1} / ${label(c.lessons[i])}`);
+};
+})();
