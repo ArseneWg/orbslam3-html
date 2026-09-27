@@ -1,0 +1,50 @@
+/* Visual-first lessons. All numbers belong to stated teaching models, never a SLAM run. */
+(() => {
+'use strict';
+const S={chapters:{},renderers:{},baseline:'4452a3c4ab75b1cde34e5505a36ec3f9edcdc4c4'};
+const E=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+S.E=E; S.add=(id,data)=>S.chapters[id]=data;
+S.t=(x,y,s,size=14,color='#39463f',anchor='start')=>`<text x="${x}" y="${y}" font-size="${size}" fill="${color}" text-anchor="${anchor}">${E(s)}</text>`;
+S.line=(a,b,color='#879e90',width=2,dash='')=>`<path d="M${a[0]} ${a[1]}L${b[0]} ${b[1]}" fill="none" stroke="${color}" stroke-width="${width}" ${dash?`stroke-dasharray="${dash}"`:''}/>`;
+S.arrow=(a,b,color='#226249',dash='')=>{const th=Math.atan2(b[1]-a[1],b[0]-a[0]);return S.line(a,b,color,2,dash)+S.line(b,[b[0]-8*Math.cos(th-.5),b[1]-8*Math.sin(th-.5)],color)+S.line(b,[b[0]-8*Math.cos(th+.5),b[1]-8*Math.sin(th+.5)],color);};
+S.dot=(x,y,r=5,color='#226249',label='')=>`<circle cx="${x}" cy="${y}" r="${r}" fill="${color}"/>`+(label?S.t(x+9,y-10,label,13,color):'');
+S.box=(x,y,w,h,title,sub='',active=false)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${active?'#e5f2e7':'#fff'}" stroke="${active?'#347657':'#c6d3ca'}"/>${S.t(x+12,y+25,title,15)}${sub?S.t(x+12,y+48,sub,12):''}`;
+S.svg=(body,w=720,h=340,label='教学图')=>`<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${E(label)}" xmlns="http://www.w3.org/2000/svg"><title>${E(label)}</title>${body}</svg>`;
+S.panel=(title,body)=>`<div class="st-panel"><b>${E(title)}</b>${body}</div>`;
+S.pair=(a,b)=>`<div class="st-pair">${a}${b}</div>`;
+S.curve=(pts,color='#226249',w=2)=>`<polyline points="${pts.map(p=>p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="${w}"/>`;
+S.f=(n,d=2)=>Number.isFinite(n)?n.toFixed(d):'不可确定';
+S.radians=d=>d*Math.PI/180;
+S.source=refs=>refs.map(([f,a,b])=>`<a target="_blank" rel="noopener" href="https://github.com/UZ-SLAMLab/ORB_SLAM3/blob/${S.baseline}/${E(f)}#L${a}-L${b}">${E(f)} · ${a}–${b} ↗</a>`).join('');
+S.mount=()=>{
+ const id=ORB_BOOK.aliases[window.BOOK_PAGE||location.pathname.split('/').pop()||'index.html']||'start',c=S.chapters[id];
+ if(!c)return;
+ const article=document.querySelector('.book-article'),old=[...article.querySelectorAll('.book-section')];
+ const journey=document.createElement('div');journey.className='st-journey';journey.id='visual-journey';
+ journey.innerHTML=`<div class="st-intro"><span>跟着图，一步一步想明白</span><p>${E(c.intro)}</p><nav aria-label="本章图解">${c.lessons.map((l,i)=>`<a href="#story-${id}-${i+1}">${i+1}. ${E(l.short||l.title)}</a>`).join('')}</nav></div>`+c.lessons.map((l,i)=>`<section class="st-lesson" id="story-${id}-${i+1}" data-lesson="${i}"><div class="st-kicker">${E(c.label)} / ${String(i+1).padStart(2,'0')}</div><h2>${E(l.title)}</h2><p class="st-hook">${E(l.hook)}</p><figure class="st-figure"><div class="st-figure-top"><b>${E(l.scene)}</b><button class="tool" data-enlarge>放大看图</button></div><div class="st-plot" aria-label="${E(l.scene)}"></div><div class="st-controls">${(l.controls||[]).map(a=>a.options?`<label>${E(a.label)}<select name="${a.key}">${a.options.map(([value,title])=>`<option value="${E(value)}">${E(title)}</option>`).join('')}</select></label>`:`<label>${E(a.label)} <output data-value="${a.key}"></output><input type="range" name="${a.key}" min="${a.min}" max="${a.max}" step="${a.step||1}" value="${a.value}" aria-label="${E(a.label)}"></label>`).join('')}</div><div class="st-tools"><button class="tool" data-reset>重置实验</button>${l.action?`<button class="st-action" data-action>${E(l.action)}</button>`:''}</div><p class="st-readout" aria-live="polite"></p><figcaption>${E(l.scope)}</figcaption></figure><div class="st-explain"><div class="st-step-tabs" role="group" aria-label="逐步讲解">${l.steps.map((a,j)=>`<button data-step="${j}" aria-pressed="${j===0}"><span>${j+1}</span>${E(a[0])}</button>`).join('')}</div><p class="st-narration" aria-live="polite"></p></div><details class="st-math"><summary>看懂图后，再拆开公式与算例</summary><div class="st-formula">${E(l.formula).replace(/\n/g,'<br>')}</div><dl>${l.terms.map(([a,b])=>`<dt>${E(a)}</dt><dd>${E(b)}</dd>`).join('')}</dl><p>${E(l.worked)}</p></details><details class="st-evidence"><summary>这幅图对应哪段真实源码？</summary><p>${E(l.code)}</p>${S.source(l.refs||[])}<p class="st-boundary">图中人物、场景和数值是确定性的教学构造；源码链接证明的是所说明的原理/实现位置，不是这段浏览器动画运行了 C++。</p></details><div class="st-takeaway"><b>这一小节带走什么</b><p>${E(l.takeaway)}</p></div></section>`).join('');
+ article.querySelector('header').after(journey);
+ const ref=document.createElement('details');ref.className='st-reference';ref.id='deep-reference';ref.innerHTML=`<summary>继续深挖：本章 ${old.length} 节完整原理与源码解读</summary><p class="st-ref-note">下面保留逐节文字、旧图解和源码行号。先看上面的图，再按问题查阅，不必一口气读完。</p>`;
+ journey.after(ref);old.forEach(s=>ref.appendChild(s));
+ if(new URLSearchParams(location.search).get('reference')==='1'||/^#(?:s\d|visual-)/.test(location.hash))ref.open=true;
+ const title=article.querySelector('h1');title.textContent=c.title;article.querySelector('.book-dek').textContent=c.dek;
+ article.querySelector('.book-goal').textContent=c.goal;
+ article.querySelector('.read-meta').innerHTML=`<span>${c.lessons.length} 个图解实验</span><span>先观察 · 再动手 · 后推导</span><span>完整源码解读可展开</span>`;
+ const toc=document.querySelector('.toc');toc.innerHTML='<p class="toc-title">本章图解路线</p>'+c.lessons.map((l,i)=>`<a href="#story-${id}-${i+1}">${i+1} / ${E(l.short||l.title)}</a>`).join('')+'<hr><a href="#deep-reference" data-open-reference>展开源码详解</a><a href="#check">检查理解</a>';
+ toc.querySelector('[data-open-reference]').onclick=()=>ref.open=true;
+ journey.querySelectorAll('.st-lesson').forEach(root=>{
+  const l=c.lessons[Number(root.dataset.lesson)];let phase=0,timer=null;
+  const controls=[...root.querySelectorAll('.st-controls input,.st-controls select')];
+  const values=()=>Object.fromEntries(controls.map(i=>[i.name,i.tagName==='SELECT'?i.value:Number(i.value)]));
+  const draw=()=>{const v=values(),result=S.renderers[l.kind](v,phase,l);root.querySelector('.st-plot').innerHTML=result.html;root.querySelector('.st-readout').textContent=result.text;root.dataset.last=JSON.stringify(result.metrics||{});root.querySelector('.st-narration').textContent=l.steps[phase][1];controls.forEach(i=>{const o=root.querySelector(`[data-value="${i.name}"]`);if(o)o.textContent=i.value;});root.querySelectorAll('[data-step]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.step)===phase)));};
+  controls.forEach(i=>i.addEventListener('input',draw));controls.forEach(i=>i.addEventListener('change',draw));
+  root.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{phase=Number(b.dataset.step);draw();});
+  root.querySelector('[data-reset]').onclick=()=>{controls.forEach((el,i)=>el.value=l.controls[i].value??l.controls[i].options[0][0]);phase=0;draw();};
+  const action=root.querySelector('[data-action]');if(action)action.onclick=()=>{if(l.kind==='pnp'){const r=S.fitPose(values());controls.forEach(i=>{if(i.name in r)i.value=r[i.name];});}else if(l.kind==='solve'){controls.find(i=>i.name==='x').value=.5;}else{phase=(phase+1)%l.steps.length;}draw();};
+  root.querySelector('[data-enlarge]').onclick=()=>{const dialog=document.createElement('dialog');dialog.className='st-dialog';dialog.innerHTML=`<button class="tool" data-close>关闭图解 ×</button><h2>${E(l.scene)}</h2>${root.querySelector('.st-plot').innerHTML}<p>${E(root.querySelector('.st-readout').textContent)}</p><p>${E(l.scope)}</p>`;document.body.appendChild(dialog);dialog.querySelector('button').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{dialog.remove();root.querySelector('[data-enlarge]').focus();});dialog.showModal();};
+  draw();
+ });
+ const openHash=()=>{const target=document.getElementById(decodeURIComponent(location.hash.slice(1)));if(target&&ref.contains(target))ref.open=true;};window.addEventListener('hashchange',openHash);openHash();
+ window.ORB_STORY_READY=true;
+};
+window.ORB_STORY=S;
+})();
